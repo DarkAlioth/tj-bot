@@ -45,7 +45,9 @@ services:
     volumes:
       - ./Jackett:/config
     healthcheck:
-      test: ["CMD", "curl", "-sfL", "-o", "/dev/null", "http://127.0.0.1:9117"]
+      # liveness = Jackett answers HTTP at all; its root 301-redirects to a
+      # cookie-test URL that -fL cannot follow, so probe a stable API path
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9117/api/v2.0/server/config"]
       interval: 30s
       timeout: 10s
       retries: 3

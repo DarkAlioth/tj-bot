@@ -10,7 +10,7 @@ from aiogram.filters.command import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from tj_bot.config import AppConfig
-from tj_bot.db.models import Torrent
+from tj_bot.db.models import Subscription, Torrent
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
@@ -245,9 +245,10 @@ async def run_search(
 
     ids = await repo.upsert_torrents(items)
     unique_ids = list(dict.fromkeys(ids))
-    qh = hashlib.md5(
-        ",".join(item.hash for item in items).encode("utf-8"), usedforsecurity=False
-    ).hexdigest()
+    # include the query text so two different queries returning an identical
+    # result set do not collide onto one cached search record
+    fingerprint = query_text + "\x00" + ",".join(item.hash for item in items)
+    qh = hashlib.md5(fingerprint.encode("utf-8"), usedforsecurity=False).hexdigest()
     query_id = await repo.create_search(qh, unique_ids, query_text)
     if user_id is not None:
         await repo.record_search_event(user_id, query_id)
@@ -526,7 +527,7 @@ async def go_search(
 
 
 def subs_view(
-    subscriptions: list[object],
+    subscriptions: list[Subscription],
 ) -> tuple[str, types.InlineKeyboardMarkup | None]:
     if not subscriptions:
         return (
@@ -537,12 +538,8 @@ def subs_view(
     rows = [
         [
             types.InlineKeyboardButton(
-                text=f"❌ {sub.query_text}",  # type: ignore[attr-defined]
-                callback_data=Sub(
-                    a="del",
-                    i=sub.id,  # type: ignore[attr-defined]
-                    qh="",
-                ).pack(),
+                text=f"❌ {sub.query_text}",
+                callback_data=Sub(a="del", i=sub.id, qh="").pack(),
             )
         ]
         for sub in subscriptions

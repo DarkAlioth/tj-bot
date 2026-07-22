@@ -1,7 +1,6 @@
 import json
 import logging
-from types import TracebackType
-from typing import Any, Self
+from typing import Any
 
 import aiohttp
 
@@ -47,17 +46,6 @@ class QbittorrentClient:
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        await self.close()
 
     async def login(self) -> None:
         url = f"{self._base_url}/api/v2/auth/login"
@@ -133,13 +121,6 @@ class QbittorrentClient:
         if not isinstance(parsed, list):
             raise QbittorrentError("Unexpected torrent list payload")
         return parsed
-
-    async def delete_by_tag(self, tag: str, delete_files: bool = True) -> None:
-        torrents = await self.torrents_by_tag(tag)
-        hashes = "|".join(t["hash"] for t in torrents if t.get("hash"))
-        if not hashes:
-            return
-        await self.delete_torrents(hashes, delete_files)
 
     def _parse_json_list(self, body: str) -> list[dict[str, Any]]:
         try:

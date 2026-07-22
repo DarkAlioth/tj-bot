@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     jackett_url: str = "http://jackett:9117"
     jackett_config_path: Path = Path("/config/ServerConfig.json")
 
+    cache_ttl_days: int = 7
+    cleanup_interval_seconds: int = 3600
+
     @field_validator("admins", mode="before")
     @classmethod
     def _parse_admins(cls, value: object) -> object:

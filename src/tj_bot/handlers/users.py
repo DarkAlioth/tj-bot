@@ -68,6 +68,7 @@ def build_user_card(
             rows.append([_btn("⬇️ Снять админа", "demote", user.user_id)])
         else:
             rows.append([_btn("⭐ В админы", "promote", user.user_id)])
+    rows.append([_btn("📋 История", "activity", user.user_id)])
     rows.append([_btn("◀️ К списку", "list", user.user_id)])
     return "\n".join(lines), types.InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -165,3 +166,45 @@ async def toggle_admin(
     if user is not None and isinstance(message, Message):
         text, keyboard = build_user_card(user, config)
         await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+
+KIND_LABELS = {"chat": "📥 в чат", "server": "🖥 на сервер"}
+
+
+@users_router.callback_query(Usr.filter(F.a == "activity"))
+async def show_activity(
+    query: CallbackQuery, callback_data: Usr, repo: TorrentRepo
+) -> None:
+    message = query.message
+    if not isinstance(message, Message):
+        await query.answer()
+        return
+    uid = callback_data.uid
+    searches, downloads = await repo.user_activity_counts(uid)
+    recent_searches = await repo.get_user_searches(uid, limit=10)
+    recent_downloads = await repo.get_user_downloads(uid, limit=10)
+    lines = [f"📋 <b>Активность</b> — поисков: {searches}, скачиваний: {downloads}\n"]
+    lines.append("🔎 <b>Последние запросы:</b>")
+    if recent_searches:
+        lines.extend(
+            f"• {format_dt(when)} — <code>{html.escape(text)}</code>"
+            for text, when in recent_searches
+        )
+    else:
+        lines.append("<i>нет</i>")
+    lines.append("\n⬇️ <b>Последние скачивания:</b>")
+    if recent_downloads:
+        lines.extend(
+            f"• {format_dt(when)} · {KIND_LABELS.get(kind, kind)} — "
+            f"{html.escape(title)}"
+            for title, kind, when in recent_downloads
+        )
+    else:
+        lines.append("<i>нет</i>")
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[[_btn("◀️ К пользователю", "card", uid)]]
+    )
+    await query.answer()
+    await message.edit_text(
+        "\n".join(lines), parse_mode=ParseMode.HTML, reply_markup=keyboard
+    )

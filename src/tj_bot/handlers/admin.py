@@ -77,6 +77,7 @@ async def send_to_server(
         await query.answer("qBittorrent недоступен", show_alert=True)
         return
 
+    await repo.record_download(query.from_user.id, torrent.title, "server")
     await query.answer("Добавлено в загрузки ⬇️")
     await message.answer(
         f"⬇️ Отправлено на сервер: <b>{torrent.title}</b>\n"

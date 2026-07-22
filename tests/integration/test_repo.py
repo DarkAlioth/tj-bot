@@ -34,6 +34,7 @@ def make_torrent(
         uploader="uploader",
         description="description",
         category=category,
+        tracker="rutracker",
         details_url="https://tracker.example/details",
         download_url="http://jackett:9117/dl/x",
         seeders=seeders,
@@ -159,3 +160,59 @@ async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None
     assert await repo.get_torrent_by_hash("old") is None
     assert await repo.get_torrent_by_hash("fresh") is not None
     assert await repo.get_search("qh-old") is None
+
+
+async def test_recent_search_and_history_and_stats(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    ids = await repo.upsert_torrents([make_torrent("a"), make_torrent("b")])
+    query_id = await repo.create_search("qh", ids, query_text="ubuntu iso")
+    await repo.record_search_event(111, query_id)
+    await repo.record_search_event(111, query_id)
+    await session.commit()
+
+    recent = await repo.find_recent_search("ubuntu iso", datetime.timedelta(hours=1))
+    assert recent is not None
+    assert recent.hash == "qh"
+    assert (
+        await repo.find_recent_search("ubuntu iso", datetime.timedelta(seconds=0))
+        is None
+    )
+
+    history = await repo.get_user_history(111)
+    assert history == [(query_id, "ubuntu iso")]
+    assert await repo.get_query_text(query_id) == "ubuntu iso"
+
+    stats = await repo.get_stats(datetime.timedelta(days=7))
+    assert stats["torrents"] == 2
+    assert stats["events_window"] == 2
+    assert stats["users_window"] == 1
+    assert stats["top_queries"] == [("ubuntu iso", 2)]
+
+
+async def test_sort_orders(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    small_new = make_torrent("s", seeders=99)
+    big_old = TorrentData(
+        hash="b",
+        title="Big",
+        uploader=None,
+        description=None,
+        category="Movies",
+        tracker="x",
+        details_url="d",
+        download_url="l",
+        seeders=1,
+        peers=0,
+        published_at=datetime.date(2020, 1, 1),
+        size=999_000_000_000,
+    )
+    ids = await repo.upsert_torrents([small_new, big_old])
+    await repo.create_search("qh2", ids)
+
+    top_seeders = await repo.get_result_page("qh2", None, 0, "se")
+    top_size = await repo.get_result_page("qh2", None, 0, "sz")
+    top_date = await repo.get_result_page("qh2", None, 0, "dt")
+
+    assert top_seeders is not None and top_seeders.hash == "s"
+    assert top_size is not None and top_size.hash == "b"
+    assert top_date is not None and top_date.hash == "s"

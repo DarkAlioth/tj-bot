@@ -396,6 +396,8 @@ async def hash_callback(
         await message.answer_document(
             BufferedInputFile(file=content, filename=filename)
         )
+        if query.from_user is not None:
+            await repo.record_download(query.from_user.id, torrent.title, "chat")
     await query.answer()
 
 

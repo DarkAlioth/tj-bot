@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tj_bot.db.filters import ResultFilters
 from tj_bot.db.models import (
     BotUser,
+    DownloadEvent,
     SearchEvent,
     SearchQuery,
     SearchQueryTorrent,
@@ -342,3 +343,47 @@ class TorrentRepo:
             if admin:
                 user.blocked = False
             await self.session.flush()
+
+    async def record_download(self, user_id: int, title: str, kind: str) -> None:
+        self.session.add(DownloadEvent(user_id=user_id, title=title[:512], kind=kind))
+        await self.session.flush()
+
+    async def get_user_searches(
+        self, user_id: int, limit: int = 10
+    ) -> list[tuple[str, datetime.datetime]]:
+        stmt = (
+            select(SearchQuery.query_text, SearchEvent.created_at)
+            .join(SearchEvent, SearchEvent.query_id == SearchQuery.id)
+            .where(SearchEvent.user_id == user_id, SearchQuery.query_text.is_not(None))
+            .order_by(SearchEvent.created_at.desc())
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in (await self.session.execute(stmt)).all()]
+
+    async def get_user_downloads(
+        self, user_id: int, limit: int = 10
+    ) -> list[tuple[str, str, datetime.datetime]]:
+        stmt = (
+            select(DownloadEvent.title, DownloadEvent.kind, DownloadEvent.created_at)
+            .where(DownloadEvent.user_id == user_id)
+            .order_by(DownloadEvent.created_at.desc(), DownloadEvent.id.desc())
+            .limit(limit)
+        )
+        return [
+            (row[0], row[1], row[2]) for row in (await self.session.execute(stmt)).all()
+        ]
+
+    async def user_activity_counts(self, user_id: int) -> tuple[int, int]:
+        searches = (
+            await self.session.execute(
+                select(func.count(SearchEvent.id)).where(SearchEvent.user_id == user_id)
+            )
+        ).scalar_one()
+        downloads = (
+            await self.session.execute(
+                select(func.count(DownloadEvent.id)).where(
+                    DownloadEvent.user_id == user_id
+                )
+            )
+        ).scalar_one()
+        return searches, downloads

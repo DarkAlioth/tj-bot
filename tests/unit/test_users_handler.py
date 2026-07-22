@@ -60,7 +60,7 @@ async def test_super_admin_has_no_management_buttons() -> None:
 
     kb = query.message.edit_text.await_args.kwargs["reply_markup"]
     labels = [b.text for r in kb.inline_keyboard for b in r]
-    assert labels == ["◀️ К списку"]
+    assert labels == ["📋 История", "◀️ К списку"]
 
 
 async def test_block_toggles_and_refreshes() -> None:
@@ -106,3 +106,23 @@ async def test_demote_removes_from_live_set() -> None:
 
     repo.set_admin.assert_awaited_once_with(100, False)
     assert 100 not in config.dynamic_admins
+
+
+async def test_activity_view_lists_searches_and_downloads() -> None:
+    import datetime
+
+    from tj_bot.handlers.users import show_activity
+
+    query = make_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.user_activity_counts.return_value = (3, 2)
+    when = datetime.datetime(2026, 7, 22, 12, 0, tzinfo=datetime.UTC)
+    repo.get_user_searches.return_value = [("ubuntu", when)]
+    repo.get_user_downloads.return_value = [("Movie", "server", when)]
+
+    await show_activity(query, Usr(a="activity", uid=100), repo)
+
+    text = query.message.edit_text.await_args.args[0]
+    assert "поисков: 3" in text and "скачиваний: 2" in text
+    assert "ubuntu" in text
+    assert "Movie" in text and "на сервер" in text

@@ -308,3 +308,23 @@ async def test_user_access_lifecycle(session: AsyncSession) -> None:
     await repo.touch_user(200, "bob", "Bob")
     recent = await repo.list_recent_users()
     assert {u.user_id for u in recent} == {100, 200}
+
+
+async def test_download_events_and_activity(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.touch_user(300, "carol", "Carol")
+    await repo.record_download(300, "Movie A", "chat")
+    await repo.record_download(300, "Movie B", "server")
+    ids = await repo.upsert_torrents([make_torrent("x")])
+    qid = await repo.create_search("qa", ids, query_text="movie")
+    await repo.record_search_event(300, qid)
+    await session.commit()
+
+    searches, downloads = await repo.user_activity_counts(300)
+    assert searches == 1 and downloads == 2
+
+    dls = await repo.get_user_downloads(300)
+    assert [(t, k) for t, k, _ in dls] == [("Movie B", "server"), ("Movie A", "chat")]
+
+    srch = await repo.get_user_searches(300)
+    assert srch[0][0] == "movie"

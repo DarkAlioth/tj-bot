@@ -71,3 +71,5 @@ Jackett/
 .pytest_cache/
 .coverage
 htmlcov/
+# Local operational secrets
+.jackett_ui_password

@@ -69,6 +69,8 @@ async def session() -> AsyncGenerator[AsyncSession]:
             "search_queries",
             "torrents",
             "magnet_links",
+            "bot_users",
+            "download_events",
         ):
             await db_session.execute(text(f"TRUNCATE {table} CASCADE"))
         await db_session.commit()
@@ -165,6 +167,19 @@ async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None
     assert await repo.get_torrent_by_hash("old") is None
     assert await repo.get_torrent_by_hash("fresh") is not None
     assert await repo.get_search("qh-old") is None
+
+
+async def test_active_user_ids_excludes_blocked(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.touch_user(9001, "alice", "Alice")
+    await repo.touch_user(9002, "bob", "Bob")
+    await repo.set_blocked(9002, True)
+    await session.commit()
+
+    ids = await repo.active_user_ids()
+
+    assert 9001 in ids
+    assert 9002 not in ids
 
 
 async def test_db_size_reports_positive_bytes(session: AsyncSession) -> None:

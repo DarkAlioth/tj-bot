@@ -141,3 +141,47 @@ def test_parse_result_uploader_fallback_without_prefix() -> None:
     data = parse_result(result)
     assert data is not None
     assert data.uploader == "SomeUser"
+
+
+def test_parse_result_bad_date_skipped_not_raised() -> None:
+    # malformed date must skip the single result, never crash the batch
+    assert parse_result({**RESULT, "PublishDate": "not-a-date"}) is None
+
+
+def test_parse_result_missing_date_uses_today() -> None:
+    import datetime
+
+    data = parse_result({**RESULT, "PublishDate": None})
+    assert data is not None
+    assert data.published_at == datetime.date.today()
+
+
+def test_parse_result_bad_size_skipped() -> None:
+    assert parse_result({**RESULT, "Size": "N/A"}) is None
+
+
+def test_parse_result_truncates_long_description() -> None:
+    long_desc = "x" * 5000
+    data = parse_result({**RESULT, "Description": long_desc})
+    assert data is not None
+    assert data.description is not None
+    assert len(data.description) <= 520
+    assert data.description.endswith("…")
+
+
+async def test_search_survives_one_malformed_result(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        good = RESULT
+        bad = {**RESULT, "Title": "Broken", "PublishDate": "garbage"}
+        return web.json_response({"Results": [good, bad, good]})
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/all/results", handler)
+    client = await jackett_env(app)
+
+    items = await client.search("x")
+
+    # the malformed result is skipped; the two good ones survive
+    assert len(items) == 2

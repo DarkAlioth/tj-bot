@@ -185,3 +185,28 @@ async def test_search_survives_one_malformed_result(
 
     # the malformed result is skipped; the two good ones survive
     assert len(items) == 2
+
+
+async def test_indexers_extracts_health_from_results(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        assert request.query["Query"] == ""  # empty health probe
+        return web.json_response(
+            {
+                "Results": [],
+                "Indexers": [
+                    {"Name": "RuTracker", "Error": None, "Results": 50},
+                    {"Name": "Dead", "Error": "timeout", "Results": 0},
+                ],
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/all/results", handler)
+    client = await jackett_env(app)
+
+    indexers = await client.indexers()
+
+    assert [i["Name"] for i in indexers] == ["RuTracker", "Dead"]
+    assert indexers[1]["Error"] == "timeout"

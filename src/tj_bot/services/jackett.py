@@ -183,9 +183,15 @@ class JackettClient:
         return parsed
 
     async def indexers(self) -> list[dict[str, Any]]:
-        """Configured Jackett indexers with their status."""
-        url = f"{self._base_url}/api/v2.0/indexers"
-        params = {"apikey": self._api_key, "configured": "true"}
+        """Indexer health from the search endpoint's ``Indexers`` array.
+
+        The management endpoint (``/api/v2.0/indexers``) requires a dashboard
+        session and only redirects for an API key, so probe the results
+        endpoint — which accepts the key and reports each queried indexer's
+        name, error and hit count — with an empty query.
+        """
+        url = f"{self._base_url}/api/v2.0/indexers/all/results"
+        params = {"apikey": self._api_key, "Query": ""}
         try:
             async with self._get_session().get(url, params=params) as resp:
                 if resp.status != 200:
@@ -195,9 +201,13 @@ class JackettClient:
         except (aiohttp.ClientError, TimeoutError) as exc:
             msg = f"Jackett indexers failed: {exc!r}"
             raise JackettError(msg) from exc
-        if not isinstance(payload, list):
+        except ValueError as exc:
+            msg = "Jackett indexers returned invalid JSON"
+            raise JackettError(msg) from exc
+        indexers = payload.get("Indexers")
+        if not isinstance(indexers, list):
             raise JackettError("Unexpected indexers payload")
-        return payload
+        return indexers
 
     async def download(self, url: str) -> bytes:
         """Fetch a .torrent file from Jackett, enforcing origin and size caps."""

@@ -55,22 +55,23 @@ async def show_stats(
 
 @admin_info_router.message(Command("indexers"))
 async def show_indexers(message: Message, jackett: JackettClient) -> None:
+    status = await message.answer("🧲 Проверяю индексеры…")
     try:
         indexers = await jackett.indexers()
     except JackettError:
         logger.exception("Failed to fetch indexers")
-        await message.answer("Jackett недоступен 🛠")
+        await status.edit_text("Jackett недоступен 🛠")
         return
     if not indexers:
-        await message.answer("Индексеры не настроены — откройте Jackett UI.")
+        await status.edit_text("Индексеры не настроены — откройте Jackett UI.")
         return
-    lines = ["🧲 <b>Индексеры Jackett</b>"]
-    for indexer in indexers:
-        name = html.escape(str(indexer.get("name", "?")))
-        error = indexer.get("last_error") or ""
+    healthy = sum(1 for i in indexers if not i.get("Error"))
+    lines = [f"🧲 <b>Индексеры Jackett</b> — {healthy}/{len(indexers)} в строю\n"]
+    for indexer in sorted(indexers, key=lambda i: bool(i.get("Error")), reverse=True):
+        name = html.escape(str(indexer.get("Name", "?")))
+        error = indexer.get("Error")
         if error:
-            error_text = html.escape(str(error))[:120]
-            lines.append(f"⚠️ {name} — <i>{error_text}</i>")
+            lines.append(f"⚠️ {name} — <i>{html.escape(str(error))[:120]}</i>")
         else:
-            lines.append(f"✅ {name}")
-    await message.answer("\n".join(lines), parse_mode=ParseMode.HTML)
+            lines.append(f"✅ {name} · {indexer.get('Results', 0)}")
+    await status.edit_text("\n".join(lines), parse_mode=ParseMode.HTML)

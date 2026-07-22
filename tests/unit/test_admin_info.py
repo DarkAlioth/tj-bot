@@ -41,13 +41,15 @@ async def test_indexers_shows_status() -> None:
     message = make_message()
     jackett = AsyncMock(spec=JackettClient)
     jackett.indexers.return_value = [
-        {"name": "RuTracker", "last_error": ""},
-        {"name": "NoNameClub", "last_error": "login failed"},
+        {"Name": "RuTracker", "Error": None, "Results": 50},
+        {"Name": "NoNameClub", "Error": "login failed", "Results": 0},
     ]
+    status = AsyncMock()
+    message.answer.return_value = status
 
     await show_indexers(cast(Message, message), jackett)
 
-    text = message.answer.await_args.args[0]
+    text = status.edit_text.await_args.args[0]
     assert "✅ RuTracker" in text
     assert "⚠️ NoNameClub" in text
     assert "login failed" in text
@@ -57,7 +59,9 @@ async def test_indexers_handles_jackett_error() -> None:
     message = make_message()
     jackett = AsyncMock(spec=JackettClient)
     jackett.indexers.side_effect = JackettError("down")
+    status = AsyncMock()
+    message.answer.return_value = status
 
     await show_indexers(cast(Message, message), jackett)
 
-    assert "недоступен" in message.answer.await_args.args[0]
+    assert "недоступен" in status.edit_text.await_args.args[0]

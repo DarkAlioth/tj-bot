@@ -90,6 +90,7 @@ ADMIN_ONLY_COMMANDS = [
     BotCommand(command="stats", description="📊 Статистика"),
     BotCommand(command="indexers", description="🧲 Индексеры Jackett"),
     BotCommand(command="users", description="👥 Пользователи"),
+    BotCommand(command="broadcast", description="📢 Рассылка"),
 ]
 
 

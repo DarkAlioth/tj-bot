@@ -4,13 +4,17 @@ import logging
 import shutil
 from typing import Any
 
-from aiogram import Router
+from aiogram import Bot, Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.exceptions import TelegramAPIError
+from aiogram.filters import Command, CommandObject
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import CallbackQuery, Message
 
+from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
+from tj_bot.services import broadcaster
 from tj_bot.services.formatting import DOWNLOADING_STATES, format_size, format_speed
 from tj_bot.services.jackett import JackettClient, JackettError
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
@@ -118,6 +122,69 @@ async def show_health(
         )
     await status.edit_text(
         "\n".join([*lines, *indexer_lines]), parse_mode=ParseMode.HTML
+    )
+
+
+class Bcast(CallbackData, prefix="bc"):
+    """Confirm or cancel a pending broadcast draft."""
+
+    a: str
+
+
+@admin_info_router.message(Command("broadcast"))
+async def broadcast_draft(message: Message, command: CommandObject) -> None:
+    """Show the exact message users will get, with confirm/cancel buttons."""
+    if not command.args:
+        await message.answer(
+            "Использование: <code>/broadcast текст рассылки</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="📢 Отправить всем", callback_data=Bcast(a="go").pack()
+                ),
+                types.InlineKeyboardButton(
+                    text="❌ Отмена", callback_data=Bcast(a="no").pack()
+                ),
+            ]
+        ]
+    )
+    await message.answer(html.escape(command.args), reply_markup=keyboard)
+
+
+@admin_info_router.callback_query(Bcast.filter())
+async def broadcast_confirm(
+    query: CallbackQuery,
+    callback_data: Bcast,
+    repo: TorrentRepo,
+    config: AppConfig,
+    bot: Bot,
+) -> None:
+    message = query.message
+    if not config.is_admin(query.from_user.id):
+        await query.answer("Недостаточно прав", show_alert=True)
+        return
+    if not isinstance(message, Message) or message.text is None:
+        await query.answer()
+        return
+    if callback_data.a == "no":
+        try:
+            await message.delete()
+        except TelegramAPIError:
+            logger.debug("Broadcast draft already gone on cancel")
+        await query.answer("Отменено")
+        return
+    # the draft message body IS the broadcast text — no extra storage needed
+    text = message.html_text
+    user_ids = await repo.active_user_ids()
+    await query.answer("Отправляю…")
+    delivered = await broadcaster.broadcast(bot, user_ids, text)
+    await message.edit_text(
+        f"📢 Доставлено {delivered} из {len(user_ids)}:\n\n{text}",
+        parse_mode=ParseMode.HTML,
     )
 
 

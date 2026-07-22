@@ -1,11 +1,21 @@
 import datetime
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
-from aiogram.types import Message
+from aiogram import Bot
+from aiogram.filters import CommandObject
+from aiogram.types import CallbackQuery, Message
 
+from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
-from tj_bot.handlers.admin_info import show_health, show_indexers, show_stats
+from tj_bot.handlers.admin_info import (
+    Bcast,
+    broadcast_confirm,
+    broadcast_draft,
+    show_health,
+    show_indexers,
+    show_stats,
+)
 from tj_bot.services.jackett import JackettClient, JackettError
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
@@ -137,3 +147,81 @@ async def test_health_jackett_error_degrades() -> None:
     await show_health(cast(Message, message), repo, jackett, make_qbit(), STARTED)
 
     assert "Jackett недоступен" in status.edit_text.await_args.args[0]
+
+
+def make_config(admin: bool = True) -> AppConfig:
+    config = MagicMock()
+    config.is_admin = lambda _uid: admin
+    return cast(AppConfig, config)
+
+
+def make_bcast_query(text: str = "Всем привет") -> AsyncMock:
+    query = AsyncMock(spec=CallbackQuery)
+    query.from_user = MagicMock()
+    query.from_user.id = 111
+    message = AsyncMock(spec=Message)
+    message.text = text
+    message.html_text = text
+    message.delete = AsyncMock()
+    message.edit_text = AsyncMock()
+    query.message = message
+    query.answer = AsyncMock()
+    return query
+
+
+async def test_broadcast_without_args_shows_usage() -> None:
+    message = make_message()
+
+    await broadcast_draft(
+        cast(Message, message), CommandObject(prefix="/", command="broadcast")
+    )
+
+    assert "Использование" in message.answer.await_args.args[0]
+
+
+async def test_broadcast_draft_escapes_and_adds_buttons() -> None:
+    message = make_message()
+    command = CommandObject(prefix="/", command="broadcast", args="<b>hi</b> all")
+
+    await broadcast_draft(cast(Message, message), command)
+
+    assert message.answer.await_args.args[0] == "&lt;b&gt;hi&lt;/b&gt; all"
+    markup = message.answer.await_args.kwargs["reply_markup"]
+    assert len(markup.inline_keyboard[0]) == 2
+
+
+async def test_broadcast_confirm_sends_to_active_users() -> None:
+    query = make_bcast_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.active_user_ids.return_value = [1, 2, 3]
+    bot = AsyncMock(spec=Bot)
+
+    await broadcast_confirm(query, Bcast(a="go"), repo, make_config(), bot)
+
+    assert bot.send_message.await_count == 3
+    assert bot.send_message.await_args.args[1] == "Всем привет"
+    final = query.message.edit_text.await_args.args[0]
+    assert "Доставлено 3 из 3" in final
+    assert "Всем привет" in final
+
+
+async def test_broadcast_cancel_deletes_draft() -> None:
+    query = make_bcast_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    bot = AsyncMock(spec=Bot)
+
+    await broadcast_confirm(query, Bcast(a="no"), repo, make_config(), bot)
+
+    query.message.delete.assert_awaited_once()
+    bot.send_message.assert_not_awaited()
+
+
+async def test_broadcast_confirm_non_admin_rejected() -> None:
+    query = make_bcast_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    bot = AsyncMock(spec=Bot)
+
+    await broadcast_confirm(query, Bcast(a="go"), repo, make_config(admin=False), bot)
+
+    assert query.answer.await_args.kwargs.get("show_alert") is True
+    bot.send_message.assert_not_awaited()

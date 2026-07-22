@@ -352,6 +352,10 @@ class TorrentRepo:
         stmt = select(BotUser.user_id).where(BotUser.admin.is_(True))
         return list((await self.session.execute(stmt)).scalars())
 
+    async def active_user_ids(self) -> list[int]:
+        stmt = select(BotUser.user_id).where(BotUser.blocked.is_(False))
+        return list((await self.session.execute(stmt)).scalars())
+
     async def list_recent_users(self, limit: int = 15) -> list[BotUser]:
         stmt = select(BotUser).order_by(BotUser.last_seen.desc()).limit(limit)
         return list((await self.session.execute(stmt)).scalars())

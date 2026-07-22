@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -10,6 +11,7 @@ from tj_bot.db.filters import ResultFilters
 from tj_bot.db.models import (
     BotUser,
     DownloadEvent,
+    MagnetLink,
     SearchEvent,
     SearchQuery,
     SearchQueryTorrent,
@@ -280,13 +282,30 @@ class TorrentRepo:
         stmt = select(Torrent).where(Torrent.hash == torrent_hash)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def save_magnet(self, url: str) -> str:
+        """Store the magnet URL; returns its hash used in callback data."""
+        magnet_hash = hashlib.md5(
+            url.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()
+        stmt = (
+            pg_insert(MagnetLink)
+            .values(hash=magnet_hash, url=url)
+            .on_conflict_do_nothing(index_elements=[MagnetLink.hash])
+        )
+        await self.session.execute(stmt)
+        return magnet_hash
+
+    async def get_magnet_url(self, magnet_hash: str) -> str | None:
+        stmt = select(MagnetLink.url).where(MagnetLink.hash == magnet_hash)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def _delete_rows(self, statement: Delete) -> int:
         result = await self.session.execute(statement)
         # DELETE always yields a CursorResult, which carries rowcount
         return int(cast(CursorResult[int], result).rowcount or 0)
 
     async def delete_stale(self, ttl: datetime.timedelta) -> int:
-        """Delete queries and torrents untouched for longer than ``ttl``."""
+        """Delete queries, torrents and magnets untouched for longer than ``ttl``."""
         cutoff = datetime.datetime.now(datetime.UTC) - ttl
         deleted_queries = await self._delete_rows(
             delete(SearchQuery).where(SearchQuery.created_at < cutoff)
@@ -294,7 +313,10 @@ class TorrentRepo:
         deleted_torrents = await self._delete_rows(
             delete(Torrent).where(Torrent.updated_at < cutoff)
         )
-        return deleted_queries + deleted_torrents
+        deleted_magnets = await self._delete_rows(
+            delete(MagnetLink).where(MagnetLink.created_at < cutoff)
+        )
+        return deleted_queries + deleted_torrents + deleted_magnets
 
     async def touch_user(
         self, user_id: int, username: str | None, full_name: str | None

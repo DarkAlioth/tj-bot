@@ -25,8 +25,8 @@ from tj_bot.services.jackett import (
     safe_torrent_filename,
 )
 
-# Dlt with type="server" is handled by the admin router
-__all__ = ["Dlt", "Pg2", "result_keyboard", "user_router"]
+# Dlt with type="server" and category_token are shared with the admin router
+__all__ = ["Dlt", "Pg2", "category_token", "result_keyboard", "user_router"]
 
 logger = logging.getLogger(__name__)
 

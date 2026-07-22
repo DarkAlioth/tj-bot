@@ -3,18 +3,20 @@ import logging
 import re
 import secrets
 from collections.abc import Coroutine
+from typing import Any
 from urllib.parse import unquote
 
 from aiogram import Bot, F, Router, types
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
-from tj_bot.handlers.user import Dlt
+from tj_bot.handlers.user import Dlt, category_token
 from tj_bot.services.download_watcher import watch_download
-from tj_bot.services.formatting import DOWNLOADING_STATES
+from tj_bot.services.formatting import DOWNLOADING_STATES, format_size
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
     JackettClient,
@@ -31,6 +33,12 @@ admin_router = Router()
 # mid-flight (asyncio holds only weak references to tasks).
 _watchers: set[asyncio.Task[None]] = set()
 
+# Dsc.t special values; real category tokens are 8 hex chars, so no collisions
+NO_CATEGORY = "-"
+CANCEL = "x"
+KIND_TORRENT = "t"
+KIND_MAGNET = "m"
+
 
 def _spawn_watcher(coro: Coroutine[object, object, None]) -> None:
     task = asyncio.create_task(coro)
@@ -45,6 +53,14 @@ class Dlc(CallbackData, prefix="dlc"):
     tag: str
 
 
+class Dsc(CallbackData, prefix="dsc"):
+    """Category choice for a pending send-to-server download."""
+
+    k: str  # KIND_TORRENT: hash points at torrents, KIND_MAGNET: magnet_links
+    t: str  # category token, NO_CATEGORY or CANCEL
+    hash: str
+
+
 def magnet_name(url: str) -> str:
     """Human-readable name from a magnet's dn= parameter, else a placeholder."""
     match = re.search(r"[?&]dn=([^&]+)", url)
@@ -53,17 +69,105 @@ def magnet_name(url: str) -> str:
     return "magnet-ссылка"
 
 
+def _category_names(categories: dict[str, Any], default: str | None) -> list[str]:
+    """Menu order: the configured default category first, rest alphabetically.
+
+    The default is always present even before qBittorrent auto-creates it on
+    the first download.
+    """
+    names = sorted(name for name in categories if name != default)
+    return [default, *names] if default else names
+
+
+async def _resolve_category(
+    qbit: QbittorrentClient, config: AppConfig, token: str
+) -> str | None:
+    """Map a callback token back to the category name; None means no category.
+
+    Raises LookupError when the category no longer exists in qBittorrent.
+    """
+    if token == NO_CATEGORY:
+        return None
+    names = _category_names(await qbit.categories(), config.settings.qbit_category)
+    for name in names:
+        if category_token(name) == token:
+            return name
+    raise LookupError(token)
+
+
+async def _send_category_menu(
+    message: Message,
+    qbit: QbittorrentClient,
+    config: AppConfig,
+    kind: str,
+    item_hash: str,
+    name: str,
+    size: int | None,
+) -> None:
+    categories = await qbit.categories()
+    free = await qbit.free_space()
+    default = config.settings.qbit_category
+
+    rows: list[list[types.InlineKeyboardButton]] = []
+    row: list[types.InlineKeyboardButton] = []
+    for category in _category_names(categories, default):
+        label = f"⭐ {category}" if category == default else category
+        row.append(
+            types.InlineKeyboardButton(
+                text=label,
+                callback_data=Dsc(
+                    k=kind, t=category_token(category), hash=item_hash
+                ).pack(),
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="📂 Без категории",
+                callback_data=Dsc(k=kind, t=NO_CATEGORY, hash=item_hash).pack(),
+            ),
+            types.InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data=Dsc(k=kind, t=CANCEL, hash=item_hash).pack(),
+            ),
+        ]
+    )
+
+    lines = [f"📤 <b>{name}</b>"]
+    if size is not None:
+        lines.append(f"Размер: <code>{format_size(size)}</code>")
+    free_text = format_size(free) if free >= 0 else "н/д"
+    lines.append(f"💾 Свободно на диске: <code>{free_text}</code>")
+    if size is not None and 0 <= free < size:
+        lines.append("\n⚠️ <b>Места на диске может не хватить!</b>")
+    lines.append("\nВыберите категорию:")
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
 async def _start_progress(
     bot: Bot,
     qbit: QbittorrentClient,
-    message: Message,
+    status: Message,
     tag: str,
     name: str,
     config: AppConfig,
 ) -> None:
-    status = await message.answer(
-        f"⬇️ Отправлено на сервер: <b>{name}</b>\nОжидаю прогресс…"
-    )
+    """Turn ``status`` into the live progress message and start the watcher."""
+    try:
+        await status.edit_text(
+            f"⬇️ Отправлено на сервер: <b>{name}</b>\nОжидаю прогресс…"
+        )
+    except TelegramAPIError:
+        # torrent is already added; progress edits are best-effort like the watcher
+        logger.debug("Progress init edit failed for %s", name)
     _spawn_watcher(
         watch_download(
             bot,
@@ -107,10 +211,8 @@ async def send_to_server(
     query: CallbackQuery,
     callback_data: Dlt,
     repo: TorrentRepo,
-    jackett: JackettClient,
     qbit: QbittorrentClient | None,
     config: AppConfig,
-    bot: Bot,
 ) -> None:
     message = query.message
     if not config.is_admin(query.from_user.id):
@@ -126,29 +228,106 @@ async def send_to_server(
         return
 
     try:
-        content = await jackett.download(torrent.download_url)
-    except DownloadTooLargeError:
-        await query.answer("Файл слишком большой", show_alert=True)
+        await _send_category_menu(
+            message,
+            qbit,
+            config,
+            kind=KIND_TORRENT,
+            item_hash=torrent.hash,
+            name=torrent.title,
+            size=torrent.size,
+        )
+    except QbittorrentError:
+        logger.exception("Failed to load qBittorrent categories")
+        await query.answer("qBittorrent недоступен", show_alert=True)
         return
-    except JackettError:
-        logger.exception("Failed to fetch torrent %s for server download", torrent.hash)
-        await query.answer("Не удалось получить файл с трекера", show_alert=True)
+    await query.answer()
+
+
+@admin_router.callback_query(Dsc.filter())
+async def choose_category(
+    query: CallbackQuery,
+    callback_data: Dsc,
+    repo: TorrentRepo,
+    jackett: JackettClient,
+    qbit: QbittorrentClient | None,
+    config: AppConfig,
+    bot: Bot,
+) -> None:
+    message = query.message
+    if not config.is_admin(query.from_user.id):
+        await query.answer("Недостаточно прав", show_alert=True)
+        return
+    if not isinstance(message, Message):
+        await query.answer()
+        return
+    if callback_data.t == CANCEL:
+        try:
+            await message.delete()
+        except TelegramAPIError:
+            logger.debug("Category menu already gone on cancel")
+        await query.answer("Отменено")
+        return
+    if qbit is None:
+        await query.answer()
+        return
+
+    try:
+        category = await _resolve_category(qbit, config, callback_data.t)
+    except QbittorrentError:
+        logger.exception("Failed to resolve qBittorrent category")
+        await query.answer("qBittorrent недоступен", show_alert=True)
+        return
+    except LookupError:
+        await query.answer(
+            "Категория не найдена, откройте меню заново", show_alert=True
+        )
         return
 
     tag = f"tjbot-{secrets.token_hex(6)}"
-    filename = safe_torrent_filename(torrent.title)
-    try:
-        await qbit.add_torrent_file(
-            content, filename, tag=tag, category=config.settings.qbit_category
-        )
-    except QbittorrentError:
-        logger.exception("Failed to add torrent %s to qBittorrent", torrent.hash)
-        await query.answer("qBittorrent недоступен", show_alert=True)
-        return
+    if callback_data.k == KIND_MAGNET:
+        url = await repo.get_magnet_url(callback_data.hash)
+        if url is None:
+            await query.answer(
+                "Ссылка устарела, отправьте magnet заново", show_alert=True
+            )
+            return
+        name = magnet_name(url)
+        try:
+            await qbit.add_torrent_url(url, tag=tag, category=category)
+        except QbittorrentError:
+            logger.exception("Failed to add magnet to qBittorrent")
+            await query.answer("qBittorrent недоступен", show_alert=True)
+            return
+    else:
+        torrent = await repo.get_torrent_by_hash(callback_data.hash)
+        if torrent is None:
+            await query.answer("Торрент устарел, повторите поиск", show_alert=True)
+            return
+        name = torrent.title
+        try:
+            content = await jackett.download(torrent.download_url)
+        except DownloadTooLargeError:
+            await query.answer("Файл слишком большой", show_alert=True)
+            return
+        except JackettError:
+            logger.exception(
+                "Failed to fetch torrent %s for server download", torrent.hash
+            )
+            await query.answer("Не удалось получить файл с трекера", show_alert=True)
+            return
+        try:
+            await qbit.add_torrent_file(
+                content, safe_torrent_filename(name), tag=tag, category=category
+            )
+        except QbittorrentError:
+            logger.exception("Failed to add torrent %s to qBittorrent", torrent.hash)
+            await query.answer("qBittorrent недоступен", show_alert=True)
+            return
 
-    await repo.record_download(query.from_user.id, torrent.title, "server")
+    await repo.record_download(query.from_user.id, name, "server")
     await query.answer("Добавлено в загрузки ⬇️")
-    await _start_progress(bot, qbit, message, tag, torrent.title, config)
+    await _start_progress(bot, qbit, message, tag, name, config)
 
 
 @admin_router.callback_query(Dlc.filter())
@@ -190,20 +369,22 @@ async def add_magnet(
     repo: TorrentRepo,
     qbit: QbittorrentClient | None,
     config: AppConfig,
-    bot: Bot,
 ) -> None:
     if qbit is None:
         await message.answer("qBittorrent не настроен.")
         return
     url = (message.text or "").strip()
-    name = magnet_name(url)
-    tag = f"tjbot-{secrets.token_hex(6)}"
+    magnet_hash = await repo.save_magnet(url)
     try:
-        await qbit.add_torrent_url(url, tag=tag, category=config.settings.qbit_category)
+        await _send_category_menu(
+            message,
+            qbit,
+            config,
+            kind=KIND_MAGNET,
+            item_hash=magnet_hash,
+            name=magnet_name(url),
+            size=None,
+        )
     except QbittorrentError:
-        logger.exception("Failed to add magnet to qBittorrent")
+        logger.exception("Failed to load qBittorrent categories")
         await message.answer("qBittorrent недоступен 🛠")
-        return
-    if message.from_user is not None:
-        await repo.record_download(message.from_user.id, name, "server")
-    await _start_progress(bot, qbit, message, tag, name, config)

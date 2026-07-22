@@ -1,8 +1,7 @@
-from typing import Callable, Dict, Any, Awaitable
+from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
 from aiogram.types import Message
-
 from infrastructure.database.repo.requests import RequestsRepo
 
 
@@ -23,7 +22,7 @@ class DatabaseMiddleware(BaseMiddleware):
                 event.from_user.id,
                 event.from_user.full_name,
                 event.from_user.language_code,
-                event.from_user.username
+                event.from_user.username,
             )
 
             data["session"] = session

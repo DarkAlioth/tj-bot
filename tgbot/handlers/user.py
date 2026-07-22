@@ -1,25 +1,38 @@
-import psycopg2
-import hashlib
 import datetime
-import aiohttp
+import hashlib
+import html
 import io
 import re
-import html
 
-from dateutil import parser
-from aiogram.types import BufferedInputFile
-from aiogram import Router, F, types
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+import aiohttp
+import psycopg2
+from aiogram import F, Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import Message, CallbackQuery
 from aiogram.filters.command import Command, CommandStart
-from tgbot.config import Config, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, DB_PORT, DB_HOST
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from dateutil import parser
+
+from tgbot.config import (
+    DB_HOST,
+    DB_PORT,
+    POSTGRES_DB,
+    POSTGRES_PASSWORD,
+    POSTGRES_USER,
+    Config,
+)
 
 user_router = Router()
 
 try:
-    conn = psycopg2.connect(database=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD, host=DB_HOST, port=DB_PORT)
+    conn = psycopg2.connect(
+        database=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
+    )
 except:
     print("I am unable to connect to the database")
     exit()
@@ -27,34 +40,40 @@ except:
 cur = conn.cursor()
 
 try:
-    cur.execute('CREATE TABLE IF NOT EXISTS torrents ('
-                'id serial PRIMARY KEY, '
-                'hash TEXT, '
-                'title TEXT, '
-                'uploader TEXT, '
-                'description TEXT, '
-                'category TEXT, '
-                'link TEXT, '
-                'dl_link TEXT, '
-                'seeders INT, '
-                'peers INT, '
-                'date DATE, '
-                'size NUMERIC '
-                ');')
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS torrents ("
+        "id serial PRIMARY KEY, "
+        "hash TEXT, "
+        "title TEXT, "
+        "uploader TEXT, "
+        "description TEXT, "
+        "category TEXT, "
+        "link TEXT, "
+        "dl_link TEXT, "
+        "seeders INT, "
+        "peers INT, "
+        "date DATE, "
+        "size NUMERIC "
+        ");"
+    )
 
-    cur.execute("CREATE TABLE IF NOT EXISTS query ("
-                "id serial PRIMARY KEY, "
-                "hash TEXT, "
-                "query TEXT, "
-                "cnt INT "
-                ");")
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS query ("
+        "id serial PRIMARY KEY, "
+        "hash TEXT, "
+        "query TEXT, "
+        "cnt INT "
+        ");"
+    )
 except:
     print()
     exit()
 
+
 class Dlt(CallbackData, prefix="dlt"):
     type: str
     hash: str
+
 
 class Pgn(CallbackData, prefix="pgn"):
     type: str
@@ -63,10 +82,22 @@ class Pgn(CallbackData, prefix="pgn"):
     srch: str
 
 
-def text_srch_msg(current_page,all_pages,url,title,uploader,description,seeders,peers,size,category,date):
+def text_srch_msg(
+    current_page,
+    all_pages,
+    url,
+    title,
+    uploader,
+    description,
+    seeders,
+    peers,
+    size,
+    category,
+    date,
+):
     text = [
         f"⠀\n⠀<b>{current_page}</b> из <b>{all_pages}</b>⠀⠀",
-        f"\n<b>Название</b>: <a href=\"{url}\">{title}</a>\n",
+        f'\n<b>Название</b>: <a href="{url}">{title}</a>\n',
     ]
 
     if description and description.strip():
@@ -75,50 +106,49 @@ def text_srch_msg(current_page,all_pages,url,title,uploader,description,seeders,
     if uploader:
         text.append(f"<b>Загрузил</b>: <code>{uploader}</code>")
 
-    text.extend([
-        f"<b>Сиды</b> / <b>Пиры</b>: <code>{seeders}</code> / <code>{peers}</code>",
-        f"<b>Размер</b>: <code>{round((size / 1024 / 1024 / 1024), 2)} GB</code>",
-        f"<b>Категория</b>: <code>{category}</code>",
-        f"<b>Дата публикации</b>: <code>{datetime.datetime.strptime(str(date), '%Y-%m-%d').strftime('%d.%m.%Y')}</code>\n⠀",
-    ])
+    text.extend(
+        [
+            f"<b>Сиды</b> / <b>Пиры</b>: <code>{seeders}</code> / <code>{peers}</code>",
+            f"<b>Размер</b>: <code>{round((size / 1024 / 1024 / 1024), 2)} GB</code>",
+            f"<b>Категория</b>: <code>{category}</code>",
+            f"<b>Дата публикации</b>: <code>{datetime.datetime.strptime(str(date), '%Y-%m-%d').strftime('%d.%m.%Y')}</code>\n⠀",
+        ]
+    )
     return text
 
 
 @user_router.message(CommandStart())
 async def admin_start(message: Message):
-    text = [
-        f"⠀\n⠀Приветсвую!\n",
-        f"Для поиска введите:",
-        f"<code>/s Название</code>\n⠀"
-    ]
+    text = ["⠀\n⠀Приветсвую!\n", "Для поиска введите:", "<code>/s Название</code>\n⠀"]
     await message.answer("\n".join(text), parse_mode=ParseMode.HTML)
 
 
 @user_router.message(F.text, Command("s"))
-async def srch_torrent(message: Message, config: Config, command, pages=0, sql_hashs=""):
+async def srch_torrent(
+    message: Message, config: Config, command, pages=0, sql_hashs=""
+):
     if command.args is None:
-        text = [
-            f"⠀\nДля поиска используйте:",
-            f"<code>/s Название</code>\n⠀"
-        ]
+        text = ["⠀\nДля поиска используйте:", "<code>/s Название</code>\n⠀"]
         await message.answer("\n".join(text), parse_mode=ParseMode.HTML)
     else:
-        srch_message = await message.answer(f"Поиск выполняется, ожидайте...")
+        srch_message = await message.answer("Поиск выполняется, ожидайте...")
         url = (
-                config.jackett.jackett_url +
-                "/api/v2.0/indexers/all/results?apikey=" +
-                config.jackett.jackett_key +
-                "&Query=\"" + command.args + "\""
+            config.jackett.jackett_url
+            + "/api/v2.0/indexers/all/results?apikey="
+            + config.jackett.jackett_key
+            + '&Query="'
+            + command.args
+            + '"'
         )
-        async with (aiohttp.ClientSession() as session):
+        async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url) as resp:
                     if resp.status == 200:
-                        results = (await resp.json())['Results']
+                        results = (await resp.json())["Results"]
                         for torrent in results:
-                            title = torrent['Title'] or "None"
+                            title = torrent["Title"] or "None"
                             title = html.escape(title)
-                            description = torrent['Description']
+                            description = torrent["Description"]
                             if not description:
                                 description = None
                             uploader = None
@@ -126,9 +156,15 @@ async def srch_torrent(message: Message, config: Config, command, pages=0, sql_h
                                 match = re.search(r"Uploader:\s*(\S+)", description)
                                 if match:
                                     uploader = match.group(1)
-                                    description = re.sub(r"Uploader:\s*[\s\S]*?<br\s*/?>|[\s\S]*?<br\s*/?>", "", description)
+                                    description = re.sub(
+                                        r"Uploader:\s*[\s\S]*?<br\s*/?>|[\s\S]*?<br\s*/?>",
+                                        "",
+                                        description,
+                                    )
                                 if not uploader:
-                                    match = re.search(r"([^\s<]+)(?=\s*<br>)", description)
+                                    match = re.search(
+                                        r"([^\s<]+)(?=\s*<br>)", description
+                                    )
                                     if match:
                                         uploader = match.group(1)
                             if description:
@@ -139,25 +175,27 @@ async def srch_torrent(message: Message, config: Config, command, pages=0, sql_h
                                 uploader = html.escape(uploader)
                             else:
                                 uploader = None
-                            category = torrent['CategoryDesc'] or "None"
-                            date = torrent['PublishDate'] or "None"
-                            trackerid = torrent['TrackerId'] or "None"
+                            category = torrent["CategoryDesc"] or "None"
+                            date = torrent["PublishDate"] or "None"
+                            trackerid = torrent["TrackerId"] or "None"
                             date = parser.isoparse(date)
-                            details = torrent['Details'] or "None"
-                            link = torrent['Link'] or "None"
-                            seeders = torrent['Seeders'] or 0
-                            peers = torrent['Peers'] or 0
-                            size = torrent['Size'] or 0
+                            details = torrent["Details"] or "None"
+                            link = torrent["Link"] or "None"
+                            seeders = torrent["Seeders"] or 0
+                            peers = torrent["Peers"] or 0
+                            size = torrent["Size"] or 0
                             salt_true_hash = title + trackerid + str(date)
-                            true_hash = hashlib.md5(salt_true_hash.encode('utf-8')).hexdigest()
-                            if torrent['Link'] is not None:
+                            true_hash = hashlib.md5(
+                                salt_true_hash.encode("utf-8"), usedforsecurity=False
+                            ).hexdigest()
+                            if torrent["Link"] is not None:
                                 if sql_hashs == "":
                                     sql_hashs = true_hash
                                 else:
                                     sql_hashs = sql_hashs + ", " + true_hash
                                 cur.execute(
                                     "SELECT hash FROM torrents WHERE hash = %s",
-                                    (true_hash,)
+                                    (true_hash,),
                                 )
                                 rows = cur.fetchall()
                                 if not rows:
@@ -185,25 +223,23 @@ async def srch_torrent(message: Message, config: Config, command, pages=0, sql_h
                                             link,
                                             seeders,
                                             peers,
-                                            date.strftime('%Y-%m-%d'),
-                                            size
-                                        )
+                                            date.strftime("%Y-%m-%d"),
+                                            size,
+                                        ),
                                     )
                                     conn.commit()
                         cur.execute(
-                            'SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s) AS subquery;',
-                            {
-                                'sql_hashs': tuple(sql_hashs.split(", "))
-                            })
+                            "SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s) AS subquery;",
+                            {"sql_hashs": tuple(sql_hashs.split(", "))},
+                        )
                         rows = cur.fetchall()
                         if rows:
                             for row in rows:
                                 counter = row[0]
-                        qh = hashlib.md5(sql_hashs.encode('utf-8')).hexdigest()
-                        cur.execute(
-                            "SELECT hash FROM query WHERE hash = %s",
-                            (qh,)
-                        )
+                        qh = hashlib.md5(
+                            sql_hashs.encode("utf-8"), usedforsecurity=False
+                        ).hexdigest()
+                        cur.execute("SELECT hash FROM query WHERE hash = %s", (qh,))
                         rows = cur.fetchall()
                         if not rows:
                             cur.execute(
@@ -212,38 +248,73 @@ async def srch_torrent(message: Message, config: Config, command, pages=0, sql_h
                                 "query,"
                                 "cnt"
                                 ") VALUES (%s, %s, %s)",
-                                (
-                                    qh,
-                                    sql_hashs,
-                                    counter
-                                )
+                                (qh, sql_hashs, counter),
                             )
                             conn.commit()
                         cur.execute(
-                            'SELECT * FROM torrents WHERE hash IN %(sql_hashs)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;',
+                            "SELECT * FROM torrents WHERE hash IN %(sql_hashs)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;",
                             {
-                                'sql_hashs': tuple(sql_hashs.split(", ")),
-                                'limit': 1,
-                                'offset': pages,
-                            })
+                                "sql_hashs": tuple(sql_hashs.split(", ")),
+                                "limit": 1,
+                                "offset": pages,
+                            },
+                        )
                         rows = cur.fetchall()
                         if rows:
                             for row in rows:
-                                text = text_srch_msg(pages + 1, counter, row[6], row[2], row[3], row[4], row[8], row[9], row[11], row[5], row[10])
+                                text = text_srch_msg(
+                                    pages + 1,
+                                    counter,
+                                    row[6],
+                                    row[2],
+                                    row[3],
+                                    row[4],
+                                    row[8],
+                                    row[9],
+                                    row[11],
+                                    row[5],
+                                    row[10],
+                                )
                             if counter > 1:
                                 kb = [
                                     [
-                                        types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                                        types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=qh, page=0, srch="ALL").pack())
+                                        types.InlineKeyboardButton(
+                                            text="💾 Скачать",
+                                            callback_data=Dlt(
+                                                type="download", hash=row[1]
+                                            ).pack(),
+                                        ),
+                                        types.InlineKeyboardButton(
+                                            text="🗂 Категории",
+                                            callback_data=Pgn(
+                                                type="go_search",
+                                                qh=qh,
+                                                page=0,
+                                                srch="ALL",
+                                            ).pack(),
+                                        ),
                                     ],
                                     [
-                                        types.InlineKeyboardButton(text="➡", callback_data=Pgn(type="go_next", qh=qh, page=0, srch="ALL").pack())
-                                    ]
+                                        types.InlineKeyboardButton(
+                                            text="➡",
+                                            callback_data=Pgn(
+                                                type="go_next",
+                                                qh=qh,
+                                                page=0,
+                                                srch="ALL",
+                                            ).pack(),
+                                        )
+                                    ],
                                 ]
                             else:
                                 kb = [
                                     [
-                                        types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack())
+                                        types.InlineKeyboardButton(
+                                            text="💾 Скачать",
+                                            callback_data=Dlt(
+                                                type="download", hash=row[1]
+                                            ).pack(),
+                                        )
                                     ]
                                 ]
                             keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
@@ -251,27 +322,24 @@ async def srch_torrent(message: Message, config: Config, command, pages=0, sql_h
                                 "\n".join(text),
                                 parse_mode=ParseMode.HTML,
                                 reply_markup=keyboard,
-                                disable_web_page_preview=True
+                                disable_web_page_preview=True,
                             )
                         else:
                             text = [
-                                f"К сожалению ничего не найдено 😔",
+                                "К сожалению ничего не найдено 😔",
                             ]
-                            await srch_message.edit_text("\n".join(text), parse_mode=ParseMode.HTML)
+                            await srch_message.edit_text(
+                                "\n".join(text), parse_mode=ParseMode.HTML
+                            )
             except aiohttp.ClientResponseError as e:
-                text = [
-                    f"<b>Ошибка!</b>",
-                    f"{e.status}",
-                    f"{e.message}"
-                ]
+                text = ["<b>Ошибка!</b>", f"{e.status}", f"{e.message}"]
                 await message.answer("\n".join(text))
 
 
 @user_router.callback_query(Dlt.filter(F.type == "download"))
 async def hash_callback(query: CallbackQuery, callback_data: Dlt):
     cur.execute(
-        "SELECT dl_link, title FROM torrents WHERE hash = %s",
-        (callback_data.hash,)
+        "SELECT dl_link, title FROM torrents WHERE hash = %s", (callback_data.hash,)
     )
     rows = cur.fetchall()
     for row in rows:
@@ -293,64 +361,122 @@ async def hash_callback(query: CallbackQuery, callback_data: Dlt):
 @user_router.callback_query(Pgn.filter(F.type == "go_priv"))
 async def go_priv(query: CallbackQuery, callback_data: Pgn):
     pages = callback_data.page - 1
-    cur.execute(
-        "SELECT query, cnt FROM query WHERE hash = %s",
-        (callback_data.qh,)
-    )
+    cur.execute("SELECT query, cnt FROM query WHERE hash = %s", (callback_data.qh,))
     rows = cur.fetchall()
     for row in rows:
         sql_hashs = row[0]
         counter = row[1]
         if callback_data.srch == "ALL":
             cur.execute(
-                'SELECT * FROM torrents WHERE hash IN %(sql_hashs)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;',
+                "SELECT * FROM torrents WHERE hash IN %(sql_hashs)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;",
                 {
-                    'sql_hashs': tuple(sql_hashs.split(", ")),
-                    'limit': 1,
-                    'offset': pages
-                })
+                    "sql_hashs": tuple(sql_hashs.split(", ")),
+                    "limit": 1,
+                    "offset": pages,
+                },
+            )
         else:
             cur.execute(
-                'SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;',
+                "SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;",
                 {
-                    'sql_hashs': tuple(sql_hashs.split(", ")),
-                    'category': callback_data.srch
-                })
+                    "sql_hashs": tuple(sql_hashs.split(", ")),
+                    "category": callback_data.srch,
+                },
+            )
             rows = cur.fetchall()
             if rows:
                 for row in rows:
                     counter = row[0]
             cur.execute(
-                'SELECT * FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;',
+                "SELECT * FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;",
                 {
-                    'sql_hashs': tuple(sql_hashs.split(", ")),
-                    'category': callback_data.srch,
-                    'limit': 1,
-                    'offset': pages
-                })
+                    "sql_hashs": tuple(sql_hashs.split(", ")),
+                    "category": callback_data.srch,
+                    "limit": 1,
+                    "offset": pages,
+                },
+            )
         rows = cur.fetchall()
         for row in rows:
-            text = text_srch_msg(pages + 1, counter, row[6], row[2], row[3], row[4], row[8], row[9], row[11], row[5], row[10])
+            text = text_srch_msg(
+                pages + 1,
+                counter,
+                row[6],
+                row[2],
+                row[3],
+                row[4],
+                row[8],
+                row[9],
+                row[11],
+                row[5],
+                row[10],
+            )
             if pages - 1 < 0:
                 kb = [
                     [
-                        types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                        types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=callback_data.qh, page=0, srch="ALL").pack())
+                        types.InlineKeyboardButton(
+                            text="💾 Скачать",
+                            callback_data=Dlt(type="download", hash=row[1]).pack(),
+                        ),
+                        types.InlineKeyboardButton(
+                            text="🗂 Категории",
+                            callback_data=Pgn(
+                                type="go_search",
+                                qh=callback_data.qh,
+                                page=0,
+                                srch="ALL",
+                            ).pack(),
+                        ),
                     ],
                     [
-                        types.InlineKeyboardButton(text="➡", callback_data=Pgn(type="go_next", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack())
-                    ]
+                        types.InlineKeyboardButton(
+                            text="➡",
+                            callback_data=Pgn(
+                                type="go_next",
+                                qh=callback_data.qh,
+                                page=pages,
+                                srch=callback_data.srch,
+                            ).pack(),
+                        )
+                    ],
                 ]
             else:
                 kb = [
                     [
-                        types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                        types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=callback_data.qh, page=0, srch="ALL").pack())
+                        types.InlineKeyboardButton(
+                            text="💾 Скачать",
+                            callback_data=Dlt(type="download", hash=row[1]).pack(),
+                        ),
+                        types.InlineKeyboardButton(
+                            text="🗂 Категории",
+                            callback_data=Pgn(
+                                type="go_search",
+                                qh=callback_data.qh,
+                                page=0,
+                                srch="ALL",
+                            ).pack(),
+                        ),
                     ],
                     [
-                        types.InlineKeyboardButton(text="⬅", callback_data=Pgn(type="go_priv", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack()),
-                        types.InlineKeyboardButton(text="➡", callback_data=Pgn(type="go_next", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack()),
-                    ]
+                        types.InlineKeyboardButton(
+                            text="⬅",
+                            callback_data=Pgn(
+                                type="go_priv",
+                                qh=callback_data.qh,
+                                page=pages,
+                                srch=callback_data.srch,
+                            ).pack(),
+                        ),
+                        types.InlineKeyboardButton(
+                            text="➡",
+                            callback_data=Pgn(
+                                type="go_next",
+                                qh=callback_data.qh,
+                                page=pages,
+                                srch=callback_data.srch,
+                            ).pack(),
+                        ),
+                    ],
                 ]
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
             await query.answer()
@@ -358,71 +484,129 @@ async def go_priv(query: CallbackQuery, callback_data: Pgn):
                 "\n".join(text),
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
 
 
 @user_router.callback_query(Pgn.filter(F.type == "go_next"))
 async def go_next(query: CallbackQuery, callback_data: Pgn):
     pages = callback_data.page + 1
-    cur.execute(
-        "SELECT query, cnt FROM query WHERE hash = %s",
-        (callback_data.qh,)
-    )
+    cur.execute("SELECT query, cnt FROM query WHERE hash = %s", (callback_data.qh,))
     rows = cur.fetchall()
     for row in rows:
         sql_hashs = row[0]
         counter = row[1]
         if callback_data.srch == "ALL":
             cur.execute(
-                'SELECT * FROM torrents WHERE hash IN %(sql_hashs)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;',
+                "SELECT * FROM torrents WHERE hash IN %(sql_hashs)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;",
                 {
-                    'sql_hashs': tuple(sql_hashs.split(", ")),
-                    'limit': 1,
-                    'offset': pages
-                })
+                    "sql_hashs": tuple(sql_hashs.split(", ")),
+                    "limit": 1,
+                    "offset": pages,
+                },
+            )
         else:
             cur.execute(
-                'SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;',
+                "SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;",
                 {
-                    'sql_hashs': tuple(sql_hashs.split(", ")),
-                    'category': callback_data.srch
-                })
+                    "sql_hashs": tuple(sql_hashs.split(", ")),
+                    "category": callback_data.srch,
+                },
+            )
             rows = cur.fetchall()
             if rows:
                 for row in rows:
                     counter = row[0]
             cur.execute(
-                'SELECT * FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;',
+                "SELECT * FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;",
                 {
-                    'sql_hashs': tuple(sql_hashs.split(", ")),
-                    'category': callback_data.srch,
-                    'limit': 1,
-                    'offset': pages
-                })
+                    "sql_hashs": tuple(sql_hashs.split(", ")),
+                    "category": callback_data.srch,
+                    "limit": 1,
+                    "offset": pages,
+                },
+            )
         rows = cur.fetchall()
         for row in rows:
-            text = text_srch_msg(pages + 1, counter, row[6], row[2], row[3], row[4], row[8], row[9], row[11], row[5], row[10])
+            text = text_srch_msg(
+                pages + 1,
+                counter,
+                row[6],
+                row[2],
+                row[3],
+                row[4],
+                row[8],
+                row[9],
+                row[11],
+                row[5],
+                row[10],
+            )
             if pages + 2 > counter:
                 kb = [
                     [
-                        types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                        types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=callback_data.qh, page=0, srch="ALL").pack())
+                        types.InlineKeyboardButton(
+                            text="💾 Скачать",
+                            callback_data=Dlt(type="download", hash=row[1]).pack(),
+                        ),
+                        types.InlineKeyboardButton(
+                            text="🗂 Категории",
+                            callback_data=Pgn(
+                                type="go_search",
+                                qh=callback_data.qh,
+                                page=0,
+                                srch="ALL",
+                            ).pack(),
+                        ),
                     ],
                     [
-                        types.InlineKeyboardButton(text="⬅", callback_data=Pgn(type="go_priv", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack())
-                    ]
+                        types.InlineKeyboardButton(
+                            text="⬅",
+                            callback_data=Pgn(
+                                type="go_priv",
+                                qh=callback_data.qh,
+                                page=pages,
+                                srch=callback_data.srch,
+                            ).pack(),
+                        )
+                    ],
                 ]
             else:
                 kb = [
                     [
-                        types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                        types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=callback_data.qh, page=0, srch="ALL").pack())
+                        types.InlineKeyboardButton(
+                            text="💾 Скачать",
+                            callback_data=Dlt(type="download", hash=row[1]).pack(),
+                        ),
+                        types.InlineKeyboardButton(
+                            text="🗂 Категории",
+                            callback_data=Pgn(
+                                type="go_search",
+                                qh=callback_data.qh,
+                                page=0,
+                                srch="ALL",
+                            ).pack(),
+                        ),
                     ],
                     [
-                        types.InlineKeyboardButton(text="⬅", callback_data=Pgn(type="go_priv", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack()),
-                        types.InlineKeyboardButton(text="➡", callback_data=Pgn(type="go_next", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack())
-                    ]
+                        types.InlineKeyboardButton(
+                            text="⬅",
+                            callback_data=Pgn(
+                                type="go_priv",
+                                qh=callback_data.qh,
+                                page=pages,
+                                srch=callback_data.srch,
+                            ).pack(),
+                        ),
+                        types.InlineKeyboardButton(
+                            text="➡",
+                            callback_data=Pgn(
+                                type="go_next",
+                                qh=callback_data.qh,
+                                page=pages,
+                                srch=callback_data.srch,
+                            ).pack(),
+                        ),
+                    ],
                 ]
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
             await query.answer()
@@ -430,53 +614,55 @@ async def go_next(query: CallbackQuery, callback_data: Pgn):
                 "\n".join(text),
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
 
 
 @user_router.callback_query(Pgn.filter(F.type == "go_search"))
 async def go_search(query: CallbackQuery, callback_data: Pgn):
-    cur.execute(
-        "SELECT query, cnt FROM query WHERE hash = %s",
-        (callback_data.qh,)
-    )
+    cur.execute("SELECT query, cnt FROM query WHERE hash = %s", (callback_data.qh,))
     rows = cur.fetchall()
     for row in rows:
         sql_hashs = row[0]
         counter = row[1]
         cur.execute(
-            'SELECT DISTINCT ON (1) category FROM torrents WHERE hash IN %(sql_hashs)s;',
-            {
-                'sql_hashs': tuple(sql_hashs.split(", "))
-            })
+            "SELECT DISTINCT ON (1) category FROM torrents WHERE hash IN %(sql_hashs)s;",
+            {"sql_hashs": tuple(sql_hashs.split(", "))},
+        )
         rows = cur.fetchall()
         if rows:
             builder = InlineKeyboardBuilder()
-            builder.button(text=f"Все - {counter}", callback_data=Pgn(type="go_priv", qh=callback_data.qh, page=1, srch="ALL").pack())
+            builder.button(
+                text=f"Все - {counter}",
+                callback_data=Pgn(
+                    type="go_priv", qh=callback_data.qh, page=1, srch="ALL"
+                ).pack(),
+            )
             for row in rows:
                 category = row[0]
                 cur.execute(
-                    'SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;',
-                    {
-                        'sql_hashs': tuple(sql_hashs.split(", ")),
-                        'category': category
-                    })
+                    "SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;",
+                    {"sql_hashs": tuple(sql_hashs.split(", ")), "category": category},
+                )
                 rows = cur.fetchall()
                 if rows:
                     for row in rows:
                         srch_cnt = row[0]
-                        builder.button(text=f"{category} - {srch_cnt}", callback_data=Pgn(type="fs", qh=callback_data.qh, page=0, srch=category).pack())
+                        builder.button(
+                            text=f"{category} - {srch_cnt}",
+                            callback_data=Pgn(
+                                type="fs", qh=callback_data.qh, page=0, srch=category
+                            ).pack(),
+                        )
             builder.adjust(1, 2)
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=builder.export())
-            text = [
-                f"⠀\n⠀<b>Выберите категорию</b>:\n⠀"
-            ]
+            text = ["⠀\n⠀<b>Выберите категорию</b>:\n⠀"]
             await query.answer()
             await query.message.edit_text(
                 "\n".join(text),
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
 
 
@@ -484,50 +670,92 @@ async def go_search(query: CallbackQuery, callback_data: Pgn):
 async def go_searched(query: CallbackQuery, callback_data: Pgn):
     pages = callback_data.page
     sort = callback_data.srch
-    cur.execute(
-        "SELECT query FROM query WHERE hash = %s",
-        (callback_data.qh,)
-    )
+    cur.execute("SELECT query FROM query WHERE hash = %s", (callback_data.qh,))
     rows = cur.fetchall()
     for row in rows:
         sql_hashs = row[0]
         cur.execute(
-            'SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;',
-            {
-                'sql_hashs': tuple(sql_hashs.split(", ")),
-                'category': sort
-            })
+            "SELECT count(id) FROM (SELECT id FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s) AS subquery;",
+            {"sql_hashs": tuple(sql_hashs.split(", ")), "category": sort},
+        )
         rows = cur.fetchall()
         if rows:
             for row in rows:
                 counter = row[0]
                 cur.execute(
-                    'SELECT * FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;',
+                    "SELECT * FROM torrents WHERE hash IN %(sql_hashs)s AND category = %(category)s ORDER BY seeders DESC, peers DESC, id DESC LIMIT %(limit)s offset %(offset)s;",
                     {
-                        'sql_hashs': tuple(sql_hashs.split(", ")),
-                        'category': sort,
-                        'limit': 1,
-                        'offset': pages
-                    })
+                        "sql_hashs": tuple(sql_hashs.split(", ")),
+                        "category": sort,
+                        "limit": 1,
+                        "offset": pages,
+                    },
+                )
                 rows = cur.fetchall()
                 for row in rows:
-                    text = text_srch_msg(pages + 1, counter, row[6], row[2], row[3], row[4], row[8], row[9], row[11], row[5], row[10])
+                    text = text_srch_msg(
+                        pages + 1,
+                        counter,
+                        row[6],
+                        row[2],
+                        row[3],
+                        row[4],
+                        row[8],
+                        row[9],
+                        row[11],
+                        row[5],
+                        row[10],
+                    )
                     if counter == 1:
                         kb = [
                             [
-                                types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                                types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=callback_data.qh, page=0, srch="ALL").pack())
+                                types.InlineKeyboardButton(
+                                    text="💾 Скачать",
+                                    callback_data=Dlt(
+                                        type="download", hash=row[1]
+                                    ).pack(),
+                                ),
+                                types.InlineKeyboardButton(
+                                    text="🗂 Категории",
+                                    callback_data=Pgn(
+                                        type="go_search",
+                                        qh=callback_data.qh,
+                                        page=0,
+                                        srch="ALL",
+                                    ).pack(),
+                                ),
                             ]
                         ]
                     else:
                         kb = [
                             [
-                                types.InlineKeyboardButton(text="💾 Скачать", callback_data=Dlt(type="download", hash=row[1]).pack()),
-                                types.InlineKeyboardButton(text="🗂 Категории", callback_data=Pgn(type="go_search", qh=callback_data.qh, page=0, srch="ALL").pack())
+                                types.InlineKeyboardButton(
+                                    text="💾 Скачать",
+                                    callback_data=Dlt(
+                                        type="download", hash=row[1]
+                                    ).pack(),
+                                ),
+                                types.InlineKeyboardButton(
+                                    text="🗂 Категории",
+                                    callback_data=Pgn(
+                                        type="go_search",
+                                        qh=callback_data.qh,
+                                        page=0,
+                                        srch="ALL",
+                                    ).pack(),
+                                ),
                             ],
                             [
-                                types.InlineKeyboardButton(text="➡", callback_data=Pgn(type="go_next", qh=callback_data.qh, page=pages, srch=callback_data.srch).pack())
-                            ]
+                                types.InlineKeyboardButton(
+                                    text="➡",
+                                    callback_data=Pgn(
+                                        type="go_next",
+                                        qh=callback_data.qh,
+                                        page=pages,
+                                        srch=callback_data.srch,
+                                    ).pack(),
+                                )
+                            ],
                         ]
                     keyboard = types.InlineKeyboardMarkup(inline_keyboard=kb)
                     await query.answer()
@@ -535,5 +763,5 @@ async def go_searched(query: CallbackQuery, callback_data: Pgn):
                         "\n".join(text),
                         parse_mode=ParseMode.HTML,
                         reply_markup=keyboard,
-                        disable_web_page_preview=True
+                        disable_web_page_preview=True,
                     )

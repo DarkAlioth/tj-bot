@@ -66,3 +66,10 @@ cache/
 # Runtime data — never commit: DB files, Jackett config holds API key and tracker credentials
 data/
 Jackett/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/

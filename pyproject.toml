@@ -9,7 +9,9 @@ dependencies = [
     "aiohttp>=3.12.0",
     "pydantic-settings>=2.14.0",
     "python-dateutil>=2.9.0",
-    "psycopg2-binary>=2.9.10",
+    "sqlalchemy[asyncio]>=2.0.40",
+    "asyncpg>=0.31.0",
+    "alembic>=1.18.0",
 ]
 
 [project.scripts]
@@ -57,10 +59,6 @@ files = ["src", "tests"]
 module = ["tj_bot.handlers.user"]
 ignore_errors = true
 
-[[tool.mypy.overrides]]
-module = ["psycopg2.*"]
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
@@ -68,11 +66,13 @@ addopts = "--cov --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 source_pkgs = ["tj_bot"]
-# Legacy module joins coverage when rewritten; main.py is polling wiring
-# verified by the deploy smoke check
+# handlers/user.py is covered via the handlers refactoring PR; main.py is
+# polling wiring verified by the deploy smoke check; migrations run in CI
+# via the integration fixture
 omit = [
     "*/handlers/user.py",
     "*/main.py",
+    "*/db/migrations/*",
 ]
 
 [tool.bandit]

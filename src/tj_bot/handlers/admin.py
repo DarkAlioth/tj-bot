@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import re
 import secrets
 from collections.abc import Coroutine
+from urllib.parse import unquote
 
 from aiogram import Bot, F, Router, types
 from aiogram.filters.callback_data import CallbackData
@@ -9,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.filters.admin import AdminOnly
 from tj_bot.handlers.user import Dlt
 from tj_bot.services.download_watcher import watch_download
 from tj_bot.services.formatting import DOWNLOADING_STATES
@@ -40,6 +43,40 @@ class Dlc(CallbackData, prefix="dlc"):
 
     a: str
     tag: str
+
+
+def magnet_name(url: str) -> str:
+    """Human-readable name from a magnet's dn= parameter, else a placeholder."""
+    match = re.search(r"[?&]dn=([^&]+)", url)
+    if match:
+        return unquote(match.group(1))[:200]
+    return "magnet-ссылка"
+
+
+async def _start_progress(
+    bot: Bot,
+    qbit: QbittorrentClient,
+    message: Message,
+    tag: str,
+    name: str,
+    config: AppConfig,
+) -> None:
+    status = await message.answer(
+        f"⬇️ Отправлено на сервер: <b>{name}</b>\nОжидаю прогресс…"
+    )
+    _spawn_watcher(
+        watch_download(
+            bot,
+            qbit,
+            chat_id=status.chat.id,
+            message_id=status.message_id,
+            tag=tag,
+            name=name,
+            keyboard_for_state=lambda state: download_keyboard(tag, state),
+            poll_interval_seconds=config.settings.qbit_poll_interval_seconds,
+            timeout_seconds=config.settings.qbit_watch_timeout_seconds,
+        )
+    )
 
 
 def download_keyboard(tag: str, state: str) -> InlineKeyboardMarkup:
@@ -111,22 +148,7 @@ async def send_to_server(
 
     await repo.record_download(query.from_user.id, torrent.title, "server")
     await query.answer("Добавлено в загрузки ⬇️")
-    status = await message.answer(
-        f"⬇️ Отправлено на сервер: <b>{torrent.title}</b>\nОжидаю прогресс…"
-    )
-    _spawn_watcher(
-        watch_download(
-            bot,
-            qbit,
-            chat_id=status.chat.id,
-            message_id=status.message_id,
-            tag=tag,
-            name=torrent.title,
-            keyboard_for_state=lambda state: download_keyboard(tag, state),
-            poll_interval_seconds=config.settings.qbit_poll_interval_seconds,
-            timeout_seconds=config.settings.qbit_watch_timeout_seconds,
-        )
-    )
+    await _start_progress(bot, qbit, message, tag, torrent.title, config)
 
 
 @admin_router.callback_query(Dlc.filter())
@@ -160,3 +182,28 @@ async def control_download(
     except QbittorrentError:
         logger.exception("qBittorrent control %r failed", callback_data.a)
         await query.answer("qBittorrent недоступен", show_alert=True)
+
+
+@admin_router.message(AdminOnly(), F.text.startswith("magnet:"))
+async def add_magnet(
+    message: Message,
+    repo: TorrentRepo,
+    qbit: QbittorrentClient | None,
+    config: AppConfig,
+    bot: Bot,
+) -> None:
+    if qbit is None:
+        await message.answer("qBittorrent не настроен.")
+        return
+    url = (message.text or "").strip()
+    name = magnet_name(url)
+    tag = f"tjbot-{secrets.token_hex(6)}"
+    try:
+        await qbit.add_torrent_url(url, tag=tag, category=config.settings.qbit_category)
+    except QbittorrentError:
+        logger.exception("Failed to add magnet to qBittorrent")
+        await message.answer("qBittorrent недоступен 🛠")
+        return
+    if message.from_user is not None:
+        await repo.record_download(message.from_user.id, name, "server")
+    await _start_progress(bot, qbit, message, tag, name, config)

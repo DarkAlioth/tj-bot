@@ -111,6 +111,21 @@ class QbittorrentClient:
         if body.strip().lower() != "ok.":
             raise QbittorrentError("qBittorrent rejected the torrent")
 
+    async def add_torrent_url(
+        self,
+        url: str,
+        tag: str,
+        category: str | None = None,
+        paused: bool = False,
+    ) -> None:
+        """Add a torrent by URL or magnet link (the qBittorrent ``urls`` field)."""
+        data = {"urls": url, "tags": tag, "stopped": str(paused).lower()}
+        if category:
+            data["category"] = category
+        body = await self._request("POST", "/api/v2/torrents/add", data=data)
+        if body.strip().lower() != "ok.":
+            raise QbittorrentError("qBittorrent rejected the magnet")
+
     async def torrents_by_tag(self, tag: str) -> list[dict[str, Any]]:
         body = await self._request("GET", "/api/v2/torrents/info", params={"tag": tag})
         try:

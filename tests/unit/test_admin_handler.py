@@ -142,3 +142,56 @@ async def test_happy_path_adds_and_spawns_watcher() -> None:
     # let the spawned watcher task run to completion
     for _ in range(3):
         await asyncio.sleep(0)
+
+
+def test_magnet_name_parses_dn() -> None:
+    from tj_bot.handlers.admin import magnet_name
+
+    assert magnet_name("magnet:?xt=urn:btih:abc&dn=Ubuntu%2024.04") == "Ubuntu 24.04"
+    assert magnet_name("magnet:?xt=urn:btih:abc") == "magnet-ссылка"
+
+
+async def test_add_magnet_adds_and_starts_progress() -> None:
+    from tj_bot.handlers.admin import add_magnet
+
+    message = AsyncMock(spec=Message)
+    message.text = "magnet:?xt=urn:btih:abc&dn=Movie"
+    message.from_user = MagicMock()
+    message.from_user.id = 111
+    message.chat = MagicMock()
+    message.chat.id = 777
+    sent = AsyncMock()
+    sent.chat = MagicMock()
+    sent.chat.id = 777
+    sent.message_id = 5
+    message.answer = AsyncMock(return_value=sent)
+    repo = AsyncMock(spec=TorrentRepo)
+    qbit = AsyncMock(spec=QbittorrentClient)
+    qbit.torrents_by_tag.return_value = [{"progress": 1.0, "name": "Movie"}]
+
+    await add_magnet(
+        cast(Message, message), repo, qbit, make_config(), cast(Bot, AsyncMock())
+    )
+
+    qbit.add_torrent_url.assert_awaited_once()
+    assert qbit.add_torrent_url.await_args.args[0].startswith("magnet:")
+    repo.record_download.assert_awaited_once_with(111, "Movie", "server")
+    import asyncio
+
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+
+async def test_add_magnet_without_qbit() -> None:
+    from tj_bot.handlers.admin import add_magnet
+
+    message = AsyncMock(spec=Message)
+    message.text = "magnet:?xt=urn:btih:abc"
+    message.answer = AsyncMock()
+    repo = AsyncMock(spec=TorrentRepo)
+
+    await add_magnet(
+        cast(Message, message), repo, None, make_config(), cast(Bot, AsyncMock())
+    )
+
+    assert "не настроен" in message.answer.await_args.args[0]

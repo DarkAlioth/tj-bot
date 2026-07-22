@@ -62,3 +62,7 @@ venv.bak/
 .idea/
 .env
 cache/
+
+# Runtime data — never commit: DB files, Jackett config holds API key and tracker credentials
+data/
+Jackett/

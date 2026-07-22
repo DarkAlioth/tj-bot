@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -34,7 +35,10 @@ from tj_bot.services.subscriptions import subscriptions_loop
 
 logger = logging.getLogger(__name__)
 
-HEARTBEAT_PATH = Path("/tmp/tj-bot-heartbeat")  # noqa: S108  # fixed in-container path
+# Ephemeral liveness marker inside the container, inspected by HEALTHCHECK.
+HEARTBEAT_PATH = Path(  # noqa: S108  # nosec B108
+    os.environ.get("HEARTBEAT_PATH", "/tmp/tj-bot-heartbeat")  # noqa: S108  # nosec B108
+)
 HEARTBEAT_INTERVAL_SECONDS = 30
 
 

@@ -167,6 +167,12 @@ async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None
     assert await repo.get_search("qh-old") is None
 
 
+async def test_db_size_reports_positive_bytes(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+
+    assert await repo.db_size() > 0
+
+
 async def test_magnet_save_get_and_ttl_cleanup(session: AsyncSession) -> None:
     repo = TorrentRepo(session)
     url = "magnet:?xt=urn:btih:abc&dn=Movie"

@@ -4,11 +4,21 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+
 services:
   bot:
     build: .
     container_name: torrent_search_bot
     restart: unless-stopped
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
     volumes:
       - ./Jackett/Jackett:/config:ro
     env_file:
@@ -20,14 +30,18 @@ services:
         condition: service_started
     networks:
       - app_network
+    mem_limit: 512m
+    cpus: 1.0
     logging: *default-logging
 
   jackett:
     image: linuxserver/jackett
     container_name: jackett
     restart: unless-stopped
+    <<: *hardening
+    # bound to loopback: reach the UI via SSH tunnel, not the LAN
     ports:
-      - "9117:9117"
+      - "127.0.0.1:9117:9117"
     volumes:
       - ./Jackett:/config
     healthcheck:
@@ -38,16 +52,19 @@ services:
       start_period: 60s
     networks:
       - app_network
+    mem_limit: 1g
+    cpus: 1.5
     logging: *default-logging
 
   db:
     image: postgres:16
     container_name: db
     restart: unless-stopped
+    <<: *hardening
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
       - ./data/db:/var/lib/postgresql/data
     healthcheck:
@@ -58,6 +75,8 @@ services:
       start_period: 30s
     networks:
       - app_network
+    mem_limit: 1g
+    cpus: 1.0
     logging: *default-logging
 
 networks:

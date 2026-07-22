@@ -2,8 +2,8 @@ import hashlib
 import html
 import logging
 import re
-from types import TracebackType
-from typing import Any, Self
+from typing import Any
+from urllib.parse import urlsplit
 
 import aiohttp
 from dateutil import parser as date_parser
@@ -12,6 +12,26 @@ from tj_bot.db.repo import TorrentData
 
 logger = logging.getLogger(__name__)
 
+MAX_QUERY_LENGTH = 200
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]", flags=re.UNICODE)
+
+
+def safe_torrent_filename(title: str) -> str:
+    """Build a safe .torrent filename from a torrent title.
+
+    Strips path separators, control characters and traversal sequences down to
+    an allow-list, so the name is inert wherever it is used (multipart field,
+    Telegram document name).
+    """
+    cleaned = _UNSAFE_FILENAME_CHARS.sub("_", title).strip(" ._")
+    cleaned = cleaned[:120] or "torrent"
+    return f"{cleaned}.torrent"
+
+
+def _default_port(scheme: str) -> int:
+    return 443 if scheme == "https" else 80
+
 
 class JackettError(Exception):
     """Search or download against Jackett failed."""
@@ -19,6 +39,10 @@ class JackettError(Exception):
 
 class DownloadTooLargeError(JackettError):
     """The tracker returned a file above the configured size cap."""
+
+
+class UntrustedDownloadError(JackettError):
+    """The download URL points outside the trusted Jackett origin (SSRF guard)."""
 
 
 def parse_result(torrent: dict[str, Any]) -> TorrentData | None:
@@ -52,9 +76,10 @@ def parse_result(torrent: dict[str, Any]) -> TorrentData | None:
         title=title,
         uploader=uploader,
         description=description,
-        category=torrent.get("CategoryDesc") or "None",
-        tracker=tracker_id,
-        details_url=torrent.get("Details") or "None",
+        # escaped like title/description: these render inside HTML messages
+        category=html.escape(torrent.get("CategoryDesc") or "None"),
+        tracker=html.escape(tracker_id),
+        details_url=html.escape(torrent.get("Details") or "None"),
         download_url=torrent["Link"],
         seeders=torrent.get("Seeders") or 0,
         peers=torrent.get("Peers") or 0,
@@ -81,29 +106,40 @@ class JackettClient:
 
     def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=self._timeout)
+            # bound concurrent outbound requests to protect Jackett and trackers
+            connector = aiohttp.TCPConnector(limit=8)
+            self._session = aiohttp.ClientSession(
+                timeout=self._timeout, connector=connector
+            )
         return self._session
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
 
-    async def __aenter__(self) -> Self:
-        return self
+    def _is_trusted_url(self, url: str) -> bool:
+        """Only URLs on the configured Jackett origin may be fetched.
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        await self.close()
+        Jackett proxies every download through its own ``/dl`` endpoint, so a
+        legitimate ``Link`` always shares Jackett's scheme/host/port. Rejecting
+        anything else closes the SSRF vector where a hostile indexer returns a
+        ``Link`` aimed at an internal service.
+        """
+        base = urlsplit(self._base_url)
+        target = urlsplit(url)
+        return (
+            target.scheme in ("http", "https")
+            and target.scheme == base.scheme
+            and target.hostname == base.hostname
+            and (target.port or _default_port(target.scheme))
+            == (base.port or _default_port(base.scheme))
+        )
 
     async def search(self, query: str) -> list[TorrentData]:
         url = f"{self._base_url}/api/v2.0/indexers/all/results"
         # Query is quoted to keep the legacy phrase-search behavior;
         # aiohttp percent-encodes all parameter values safely.
-        params = {"apikey": self._api_key, "Query": f'"{query}"'}
+        params = {"apikey": self._api_key, "Query": f'"{query[:MAX_QUERY_LENGTH]}"'}
         try:
             async with self._get_session().get(url, params=params) as resp:
                 if resp.status != 200:
@@ -144,7 +180,10 @@ class JackettClient:
         return payload
 
     async def download(self, url: str) -> bytes:
-        """Fetch a .torrent file enforcing the size cap."""
+        """Fetch a .torrent file from Jackett, enforcing origin and size caps."""
+        if not self._is_trusted_url(url):
+            logger.warning("Blocked download from untrusted URL: %r", url)
+            raise UntrustedDownloadError
         try:
             async with self._get_session().get(url) as resp:
                 if resp.status != 200:

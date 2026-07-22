@@ -63,14 +63,14 @@ def register_global_middlewares(
     dp: Dispatcher, config: AppConfig, session_pool: SessionPool
 ) -> None:
     config_middleware = ConfigMiddleware(config)
+    throttling_middleware = ThrottlingMiddleware()
     database_middleware = DatabaseMiddleware(session_pool)
-    dp.message.outer_middleware(config_middleware)
-    # throttling sits after config (needs admin ids) and before the database
-    # so rate-limited spam never opens a session
-    dp.message.outer_middleware(ThrottlingMiddleware())
-    dp.message.outer_middleware(database_middleware)
-    dp.callback_query.outer_middleware(config_middleware)
-    dp.callback_query.outer_middleware(database_middleware)
+    # throttling sits after config (needs admin ids) and before the database so
+    # rate-limited spam never opens a session; applied to messages and callbacks
+    for observer in (dp.message, dp.callback_query):
+        observer.outer_middleware(config_middleware)
+        observer.outer_middleware(throttling_middleware)
+        observer.outer_middleware(database_middleware)
 
 
 async def setup_qbittorrent(settings: Settings) -> QbittorrentClient | None:

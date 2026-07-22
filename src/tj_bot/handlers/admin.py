@@ -9,7 +9,12 @@ from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers.user import Dlt
 from tj_bot.services.download_watcher import watch_completion
-from tj_bot.services.jackett import DownloadTooLargeError, JackettClient, JackettError
+from tj_bot.services.jackett import (
+    DownloadTooLargeError,
+    JackettClient,
+    JackettError,
+    safe_torrent_filename,
+)
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
 logger = logging.getLogger(__name__)
@@ -51,7 +56,7 @@ async def send_to_server(
         return
 
     tag = f"tjbot-{secrets.token_hex(6)}"
-    filename = torrent.title.replace("/", "|") + ".torrent"
+    filename = safe_torrent_filename(torrent.title)
     try:
         await qbit.add_torrent_file(
             content, filename, tag=tag, category=config.settings.qbit_category

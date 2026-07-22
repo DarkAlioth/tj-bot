@@ -10,6 +10,12 @@ from aiogram.filters.command import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from tj_bot.config import AppConfig
+from tj_bot.db.filters import (
+    DATE_LABELS,
+    SEEDERS_LABELS,
+    SIZE_LABELS,
+    ResultFilters,
+)
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.services.jackett import (
@@ -33,8 +39,15 @@ SEARCH_UNAVAILABLE_TEXT = "Поиск временно недоступен, п�
 SEARCHING_TEXT = "Поиск выполняется, ожидайте..."
 STALE_QUERY_TEXT = "Запрос устарел, выполните новый поиск: /s"
 
-SORT_LABELS = {"se": "↕ Сиды", "sz": "↕ Размер", "dt": "↕ Дата"}
-SORT_NEXT = {"se": "sz", "sz": "dt", "dt": "se"}
+DEFAULT_FILTER = "000"
+SORT_LABELS = {
+    "se": "Сиды ↓",
+    "sz": "Размер ↓",
+    "za": "Размер ↑",
+    "dt": "Дата ↓",
+    "da": "Дата ↑",
+}
+SORT_NEXT = {"se": "sz", "sz": "za", "za": "dt", "dt": "da", "da": "se"}
 
 
 class Dlt(CallbackData, prefix="dlt"):
@@ -48,6 +61,15 @@ class Pg2(CallbackData, prefix="pg2"):
     p: int
     c: str
     s: str
+    fl: str
+
+
+class Flt(CallbackData, prefix="flt"):
+    a: str
+    qh: str
+    c: str
+    s: str
+    fl: str
 
 
 class Upd(CallbackData, prefix="upd"):
@@ -116,11 +138,13 @@ def result_keyboard(
     has_prev: bool,
     has_next: bool,
     show_server: bool = False,
+    flt: str = DEFAULT_FILTER,
 ) -> types.InlineKeyboardMarkup:
     def pg2(t: str, p: int = page, c: str = cat, s: str = sort) -> str:
-        return Pg2(t=t, qh=qh, p=p, c=c, s=s).pack()
+        return Pg2(t=t, qh=qh, p=p, c=c, s=s, fl=flt).pack()
 
-    # row 1: categories + sort
+    filter_label = "🔎 Фильтр" + (" ✅" if flt != DEFAULT_FILTER else "")
+    # row 1: categories, sort, filters
     kb = [
         [
             types.InlineKeyboardButton(
@@ -132,6 +156,10 @@ def result_keyboard(
             types.InlineKeyboardButton(
                 text=SORT_LABELS.get(sort, SORT_LABELS[DEFAULT_SORT]),
                 callback_data=pg2("fs", p=0, s=SORT_NEXT.get(sort, DEFAULT_SORT)),
+            ),
+            types.InlineKeyboardButton(
+                text=filter_label,
+                callback_data=Flt(a="open", qh=qh, c=cat, s=sort, fl=flt).pack(),
             ),
         ]
     ]
@@ -379,6 +407,7 @@ async def render_page(
     page: int,
     cat: str,
     sort: str,
+    flt: str = DEFAULT_FILTER,
 ) -> None:
     message = query.message
     search = await repo.get_search(qh)
@@ -386,14 +415,17 @@ async def render_page(
         await query.answer()
         return
     category = await resolve_category(repo, qh, cat)
-    counter = (
-        search.result_count
-        if category is None
-        else await repo.count_results(qh, category)
-    )
-    torrent = await repo.get_result_page(qh, category, page, sort)
+    filters = ResultFilters.from_code(flt)
+    if category is None and not filters.is_active:
+        counter = search.result_count
+    else:
+        counter = await repo.count_results(qh, category, filters)
+    torrent = await repo.get_result_page(qh, category, page, sort, filters)
     if torrent is None:
-        await query.answer()
+        if page == 0:
+            await query.answer("Ничего не найдено с этими фильтрами", show_alert=True)
+        else:
+            await query.answer()
         return
     show_server = config.qbit_enabled and config.is_admin(
         query.from_user.id if query.from_user else None
@@ -429,6 +461,7 @@ async def go_priv(
         callback_data.p - 1,
         callback_data.c,
         callback_data.s,
+        callback_data.fl,
     )
 
 
@@ -444,6 +477,7 @@ async def go_next(
         callback_data.p + 1,
         callback_data.c,
         callback_data.s,
+        callback_data.fl,
     )
 
 
@@ -459,6 +493,7 @@ async def go_searched(
         callback_data.p,
         callback_data.c,
         callback_data.s,
+        callback_data.fl,
     )
 
 
@@ -477,7 +512,9 @@ async def go_search(
         return
 
     def pg2(t: str, p: int, c: str) -> str:
-        return Pg2(t=t, qh=callback_data.qh, p=p, c=c, s=callback_data.s).pack()
+        return Pg2(
+            t=t, qh=callback_data.qh, p=p, c=c, s=callback_data.s, fl=callback_data.fl
+        ).pack()
 
     rows = [
         [
@@ -517,3 +554,70 @@ async def go_search(
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,
     )
+
+
+def build_filter_menu(
+    qh: str, cat: str, sort: str, flt: str
+) -> tuple[str, types.InlineKeyboardMarkup]:
+    filters = ResultFilters.from_code(flt)
+
+    def cb(action: str, new_fl: str) -> str:
+        return Flt(a=action, qh=qh, c=cat, s=sort, fl=new_fl).pack()
+
+    rows = [
+        [
+            types.InlineKeyboardButton(
+                text=f"Сиды: {SEEDERS_LABELS[filters.seeders]}  🔁",
+                callback_data=cb("cs", filters.cycled("seeders").to_code()),
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text=f"Размер: {SIZE_LABELS[filters.size]}  🔁",
+                callback_data=cb("cz", filters.cycled("size").to_code()),
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text=f"Дата: {DATE_LABELS[filters.date]}  🔁",
+                callback_data=cb("cd", filters.cycled("date").to_code()),
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="♻ Сброс", callback_data=cb("rs", DEFAULT_FILTER)
+            ),
+            types.InlineKeyboardButton(
+                text="✅ Применить", callback_data=cb("ap", flt)
+            ),
+        ],
+    ]
+    text = f"🔎 <b>Фильтры</b>\nАктивно: {filters.summary()}"
+    return text, types.InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@user_router.callback_query(Flt.filter())
+async def filter_menu(
+    query: CallbackQuery, callback_data: Flt, repo: TorrentRepo, config: AppConfig
+) -> None:
+    message = query.message
+    if not isinstance(message, Message):
+        await query.answer()
+        return
+    if callback_data.a == "ap":
+        await render_page(
+            query,
+            repo,
+            config,
+            callback_data.qh,
+            0,
+            callback_data.c,
+            callback_data.s,
+            callback_data.fl,
+        )
+        return
+    text, keyboard = build_filter_menu(
+        callback_data.qh, callback_data.c, callback_data.s, callback_data.fl
+    )
+    await query.answer()
+    await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)

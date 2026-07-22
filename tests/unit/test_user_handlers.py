@@ -150,7 +150,15 @@ async def test_render_page_navigation_buttons() -> None:
 
     keyboard = telegram_message.edit_text.await_args.kwargs["reply_markup"]
     labels = [button.text for row in keyboard.inline_keyboard for button in row]
-    assert labels == ["🗂 Категории", "↕ Сиды", "💾 Скачать", "⬅", "🔄", "➡"]
+    assert labels == [
+        "🗂 Категории",
+        "Сиды ↓",
+        "🔎 Фильтр",
+        "💾 Скачать",
+        "⬅",
+        "🔄",
+        "➡",
+    ]
 
     callbacks = [
         button.callback_data
@@ -169,7 +177,7 @@ async def test_categories_menu_has_back_button_to_origin_card() -> None:
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=3)
     repo.get_categories.return_value = [("Movies", 2), ("Audio", 1)]
-    origin = Pg2(t="gs", qh="qh", p=4, c=category_token("Movies"), s="se")
+    origin = Pg2(t="gs", qh="qh", p=4, c=category_token("Movies"), s="se", fl="000")
 
     await go_search(query, origin, repo)
 
@@ -269,3 +277,51 @@ async def test_history_replay_stale_query_alerts() -> None:
     await replay_history(query, Hst(qid=9), repo, jackett, make_config())
 
     assert query.answer.await_args.kwargs.get("show_alert") is True
+
+
+async def test_filter_menu_open_and_cycle() -> None:
+    from tj_bot.handlers.user import Flt, filter_menu
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+
+    await filter_menu(
+        query, Flt(a="open", qh="qh", c="ALL", s="se", fl="000"), repo, make_config()
+    )
+
+    text = telegram_message.edit_text.await_args.args[0]
+    assert "Фильтры" in text
+    kb = telegram_message.edit_text.await_args.kwargs["reply_markup"]
+    labels = [b.text for r in kb.inline_keyboard for b in r]
+    assert any("Сиды" in x for x in labels)
+    assert any("Применить" in x for x in labels)
+    assert all(
+        len(b.callback_data.encode()) <= 64
+        for r in kb.inline_keyboard
+        for b in r
+        if b.callback_data
+    )
+
+
+async def test_filter_menu_apply_renders_page() -> None:
+    from tj_bot.handlers.user import Flt, filter_menu
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=3)
+    repo.count_results.return_value = 1
+    repo.get_result_page.return_value = make_torrent_model()
+
+    await filter_menu(
+        query, Flt(a="ap", qh="qh", c="ALL", s="se", fl="230"), repo, make_config()
+    )
+
+    # applied filter -> counted with filters, page rendered
+    repo.count_results.assert_awaited()
+    telegram_message.edit_text.assert_awaited()

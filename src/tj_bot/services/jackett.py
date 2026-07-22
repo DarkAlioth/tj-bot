@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import html
 import logging
@@ -13,6 +14,7 @@ from tj_bot.db.repo import TorrentData
 logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 200
+MAX_DESCRIPTION_CHARS = 500
 
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]", flags=re.UNICODE)
 
@@ -46,7 +48,20 @@ class UntrustedDownloadError(JackettError):
 
 
 def parse_result(torrent: dict[str, Any]) -> TorrentData | None:
-    """Convert one Jackett result to TorrentData; None when not downloadable."""
+    """Convert one Jackett result to TorrentData.
+
+    Returns None when the result is not downloadable or cannot be parsed — a
+    single malformed result (bad date, non-numeric size, missing field) must
+    never abort the whole search batch.
+    """
+    try:
+        return _parse_result(torrent)
+    except (KeyError, ValueError, TypeError, OverflowError) as exc:
+        logger.warning("Skipping unparseable result %r: %r", torrent.get("Title"), exc)
+        return None
+
+
+def _parse_result(torrent: dict[str, Any]) -> TorrentData | None:
     if torrent.get("Link") is None:
         return None
     title = html.escape(torrent.get("Title") or "None")
@@ -63,9 +78,14 @@ def parse_result(torrent: dict[str, Any]) -> TorrentData | None:
             match = re.search(r"([^\s<]+)(?=\s*<br>)", description)
             if match:
                 uploader = match.group(1)
+    if description and len(description) > MAX_DESCRIPTION_CHARS:
+        description = description[:MAX_DESCRIPTION_CHARS].rstrip() + "…"
     description = html.escape(description) if description else None
     uploader = html.escape(uploader) if uploader else None
-    published_at = date_parser.isoparse(torrent["PublishDate"]).date()
+    raw_date = torrent.get("PublishDate")
+    published_at = (
+        date_parser.isoparse(raw_date).date() if raw_date else datetime.date.today()
+    )
     tracker_id = torrent.get("TrackerId") or "None"
     raw_hash = f"{title}{tracker_id}{published_at}"
     torrent_hash = hashlib.md5(

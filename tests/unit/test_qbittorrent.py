@@ -137,3 +137,68 @@ async def test_torrents_by_tag_parses_json(
 
     assert torrents[0]["hash"] == "abc"
     assert torrents[0]["progress"] == 1.0
+
+
+async def test_console_endpoints(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    calls: dict[str, Any] = {}
+
+    async def info(request: web.Request) -> web.Response:
+        calls["info_params"] = dict(request.query)
+        return web.Response(text=json.dumps([{"hash": "h1", "state": "downloading"}]))
+
+    async def transfer(request: web.Request) -> web.Response:
+        return web.Response(text=json.dumps({"dl_info_speed": 5}))
+
+    async def mode(request: web.Request) -> web.Response:
+        return web.Response(text="1")
+
+    async def action(request: web.Request) -> web.Response:
+        form = await request.post()
+        calls[request.path] = dict(form)
+        return web.Response(text="")
+
+    app = login_app(
+        torrents__info=info,
+        transfer__info=transfer,
+        transfer__speedLimitsMode=mode,
+        transfer__toggleSpeedLimitsMode=action,
+        torrents__stop=action,
+        torrents__start=action,
+        torrents__delete=action,
+        torrents__setForceStart=action,
+        torrents__topPrio=action,
+    )
+    client = await qbit_env(app)
+
+    torrents = await client.list_torrents()
+    assert torrents[0]["hash"] == "h1"
+    assert calls["info_params"]["sort"] == "added_on"
+
+    assert (await client.transfer_info())["dl_info_speed"] == 5
+    assert await client.alt_speed_enabled() is True
+    await client.toggle_alt_speed()
+
+    await client.stop_torrents("all")
+    assert calls["/api/v2/torrents/stop"] == {"hashes": "all"}
+    await client.start_torrents("h1")
+    await client.delete_torrents("h1", delete_files=True)
+    assert calls["/api/v2/torrents/delete"]["deleteFiles"] == "true"
+    await client.set_force_start("h1", True)
+    await client.change_priority("topPrio", "h1")
+    assert calls["/api/v2/torrents/topPrio"] == {"hashes": "h1"}
+
+
+async def test_priority_queueing_disabled(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    from tj_bot.services.qbittorrent import QueueingDisabledError
+
+    async def prio(request: web.Request) -> web.Response:
+        return web.Response(status=409)
+
+    client = await qbit_env(login_app(torrents__increasePrio=prio))
+
+    with pytest.raises(QueueingDisabledError):
+        await client.change_priority("increasePrio", "h1")

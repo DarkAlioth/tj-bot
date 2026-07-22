@@ -6,7 +6,14 @@ from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tj_bot.db.models import SearchEvent, SearchQuery, SearchQueryTorrent, Torrent
+from tj_bot.db.models import (
+    SearchEvent,
+    SearchQuery,
+    SearchQueryTorrent,
+    Subscription,
+    SubscriptionSeen,
+    Torrent,
+)
 
 
 @dataclass(frozen=True)
@@ -254,3 +261,80 @@ class TorrentRepo:
             delete(Torrent).where(Torrent.updated_at < cutoff)
         )
         return deleted_queries + deleted_torrents
+
+    async def get_result_hashes(self, query_hash: str) -> list[str]:
+        stmt = (
+            select(Torrent.hash)
+            .select_from(Torrent, SearchQueryTorrent, SearchQuery)
+            .where(*self._results_filter(query_hash, None))
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def create_subscription(
+        self, user_id: int, chat_id: int, query_text: str
+    ) -> Subscription | None:
+        """Create a subscription; None when a duplicate already exists."""
+        existing = await self.session.execute(
+            select(Subscription).where(
+                Subscription.user_id == user_id,
+                Subscription.query_text == query_text,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            return None
+        subscription = Subscription(
+            user_id=user_id, chat_id=chat_id, query_text=query_text
+        )
+        self.session.add(subscription)
+        await self.session.flush()
+        return subscription
+
+    async def count_subscriptions(self, user_id: int) -> int:
+        stmt = select(func.count(Subscription.id)).where(
+            Subscription.user_id == user_id
+        )
+        return (await self.session.execute(stmt)).scalar_one()
+
+    async def list_subscriptions(self, user_id: int) -> list[Subscription]:
+        stmt = (
+            select(Subscription)
+            .where(Subscription.user_id == user_id)
+            .order_by(Subscription.created_at)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def all_subscriptions(self) -> list[Subscription]:
+        stmt = select(Subscription).order_by(Subscription.id)
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def delete_subscription(self, subscription_id: int, user_id: int) -> bool:
+        result = await self._delete_rows(
+            delete(Subscription).where(
+                Subscription.id == subscription_id,
+                Subscription.user_id == user_id,
+            )
+        )
+        return result > 0
+
+    async def seen_hashes(self, subscription_id: int) -> set[str]:
+        stmt = select(SubscriptionSeen.torrent_hash).where(
+            SubscriptionSeen.subscription_id == subscription_id
+        )
+        return set((await self.session.execute(stmt)).scalars())
+
+    async def add_seen_hashes(self, subscription_id: int, hashes: list[str]) -> None:
+        if not hashes:
+            return
+        stmt = pg_insert(SubscriptionSeen).values(
+            [
+                {"subscription_id": subscription_id, "torrent_hash": torrent_hash}
+                for torrent_hash in set(hashes)
+            ]
+        )
+        await self.session.execute(stmt.on_conflict_do_nothing())
+
+    async def touch_subscription(self, subscription_id: int) -> None:
+        subscription = await self.session.get(Subscription, subscription_id)
+        if subscription is not None:
+            subscription.last_checked_at = datetime.datetime.now(datetime.UTC)
+            await self.session.flush()

@@ -28,6 +28,7 @@ from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
 from tj_bot.services.jackett import JackettClient
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
+from tj_bot.services.subscriptions import subscriptions_loop
 
 logger = logging.getLogger(__name__)
 
@@ -110,12 +111,18 @@ async def main(settings: Settings) -> None:
             interval_seconds=settings.cleanup_interval_seconds,
         )
     )
+    subscriptions_task = asyncio.create_task(
+        subscriptions_loop(
+            bot, session_pool, jackett, settings.subscriptions_check_seconds
+        )
+    )
     try:
         await broadcaster.broadcast(bot, config.admin_ids, "Бот был запущен")
         logger.info("Starting polling")
         await dp.start_polling(bot)
     finally:
         cleanup_task.cancel()
+        subscriptions_task.cancel()
         await jackett.close()
         if qbit is not None:
             await qbit.close()

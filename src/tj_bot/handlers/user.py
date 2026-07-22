@@ -53,6 +53,12 @@ class Hst(CallbackData, prefix="hst"):
     qid: int
 
 
+class Sub(CallbackData, prefix="sub"):
+    a: str
+    i: int
+    qh: str
+
+
 def normalize_query(raw: str) -> str:
     return " ".join(raw.split()).lower()[:200]
 
@@ -133,7 +139,11 @@ def result_keyboard(
         types.InlineKeyboardButton(
             text=SORT_LABELS.get(sort, SORT_LABELS[DEFAULT_SORT]),
             callback_data=pg2("fs", p=0, s=SORT_NEXT.get(sort, DEFAULT_SORT)),
-        )
+        ),
+        types.InlineKeyboardButton(
+            text="🔔",
+            callback_data=Sub(a="add", i=0, qh=qh).pack(),
+        ),
     ]
     if show_server:
         tools.append(
@@ -510,3 +520,94 @@ async def go_search(
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,
     )
+
+
+def subs_view(
+    subscriptions: list[object],
+) -> tuple[str, types.InlineKeyboardMarkup | None]:
+    if not subscriptions:
+        return (
+            "Подписок нет. Нажмите 🔔 на карточке поиска, чтобы следить "
+            "за новинками по запросу.",
+            None,
+        )
+    rows = [
+        [
+            types.InlineKeyboardButton(
+                text=f"❌ {sub.query_text}",  # type: ignore[attr-defined]
+                callback_data=Sub(
+                    a="del",
+                    i=sub.id,  # type: ignore[attr-defined]
+                    qh="",
+                ).pack(),
+            )
+        ]
+        for sub in subscriptions
+    ]
+    text = (
+        "🔔 <b>Подписки</b> — бот проверяет новинки по расписанию.\n"
+        "Нажмите, чтобы отписаться:"
+    )
+    return text, types.InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@user_router.callback_query(Sub.filter(F.a == "add"))
+async def subscribe(
+    query: CallbackQuery,
+    callback_data: Sub,
+    repo: TorrentRepo,
+    config: AppConfig,
+) -> None:
+    message = query.message
+    user = query.from_user
+    if not isinstance(message, Message) or user is None:
+        await query.answer()
+        return
+    search = await repo.get_search(callback_data.qh)
+    if search is None or not search.query_text:
+        await query.answer(STALE_QUERY_TEXT, show_alert=True)
+        return
+    if not config.is_admin(user.id):
+        count = await repo.count_subscriptions(user.id)
+        if count >= config.settings.subscriptions_per_user:
+            await query.answer(
+                f"Лимит подписок: {config.settings.subscriptions_per_user}. "
+                "Удалите лишние: /subs",
+                show_alert=True,
+            )
+            return
+    subscription = await repo.create_subscription(
+        user.id, message.chat.id, search.query_text
+    )
+    if subscription is None:
+        await query.answer("Вы уже подписаны на этот запрос ✔")
+        return
+    # prefill so only future results count as news
+    await repo.add_seen_hashes(
+        subscription.id, await repo.get_result_hashes(callback_data.qh)
+    )
+    await query.answer("🔔 Подписка создана — сообщу о новинках")
+
+
+@user_router.message(Command("subs"))
+async def list_subs(message: Message, repo: TorrentRepo) -> None:
+    user_id = message.from_user.id if message.from_user else None
+    if user_id is None:
+        return
+    text, keyboard = subs_view(list(await repo.list_subscriptions(user_id)))
+    await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+
+@user_router.callback_query(Sub.filter(F.a == "del"))
+async def unsubscribe(
+    query: CallbackQuery, callback_data: Sub, repo: TorrentRepo
+) -> None:
+    message = query.message
+    user = query.from_user
+    if not isinstance(message, Message) or user is None:
+        await query.answer()
+        return
+    removed = await repo.delete_subscription(callback_data.i, user.id)
+    await query.answer("Подписка удалена" if removed else "Уже удалена")
+    text, keyboard = subs_view(list(await repo.list_subscriptions(user.id)))
+    await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)

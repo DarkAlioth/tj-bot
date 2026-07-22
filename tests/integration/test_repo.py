@@ -285,3 +285,26 @@ async def test_result_filters_apply(session: AsyncSession) -> None:
     assert await repo.count_results("qhf", None, ResultFilters(size=2)) == 0
     # date within a year -> only big (small is 2020)
     assert await repo.count_results("qhf", None, ResultFilters(date=3)) == 1
+
+
+async def test_user_access_lifecycle(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+
+    user = await repo.touch_user(100, "alice", "Alice")
+    assert user.user_id == 100 and not user.blocked and not user.admin
+    # upsert refreshes identity (fresh session per request in production)
+    await repo.touch_user(100, "alice2", "Alice B")
+    session.expire_all()
+    stored = await repo.get_user(100)
+    assert stored is not None and stored.username == "alice2"
+
+    await repo.set_blocked(100, True)
+    assert await repo.is_blocked(100) is True
+    await repo.set_admin(100, True)
+    # promoting unblocks
+    assert await repo.is_blocked(100) is False
+    assert await repo.admin_user_ids() == [100]
+
+    await repo.touch_user(200, "bob", "Bob")
+    recent = await repo.list_recent_users()
+    assert {u.user_id for u in recent} == {100, 200}

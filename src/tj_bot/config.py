@@ -1,6 +1,6 @@
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
@@ -67,9 +67,16 @@ class JackettRuntime:
 class AppConfig:
     settings: Settings
     jackett: JackettRuntime
+    # promoted-at-runtime admins loaded from the DB; the mutable set is updated
+    # in place when an admin is promoted/demoted, so is_admin stays live
+    dynamic_admins: set[int] = field(default_factory=set)
 
     @property
     def admin_ids(self) -> list[int]:
+        return [*self.settings.admins, *sorted(self.dynamic_admins)]
+
+    @property
+    def super_admins(self) -> list[int]:
         return self.settings.admins
 
     @property
@@ -77,6 +84,11 @@ class AppConfig:
         return self.settings.qbit_enabled
 
     def is_admin(self, user_id: int | None) -> bool:
+        if user_id is None:
+            return False
+        return user_id in self.settings.admins or user_id in self.dynamic_admins
+
+    def is_super_admin(self, user_id: int | None) -> bool:
         return user_id is not None and user_id in self.settings.admins
 
 

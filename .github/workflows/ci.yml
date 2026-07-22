@@ -56,3 +56,16 @@ jobs:
         with:
           context: .
           push: false
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, tests, docker]
+    runs-on: [self-hosted, deploy]
+    steps:
+      - name: Deploy to production
+        run: |
+          cd /path/to/tj-bot
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose up -d --build
+          docker image prune -f

@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   bot:
     build: .
@@ -8,10 +14,13 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - jackett
+      db:
+        condition: service_healthy
+      jackett:
+        condition: service_started
     networks:
       - app_network
+    logging: *default-logging
 
   jackett:
     image: linuxserver/jackett
@@ -21,8 +30,15 @@ services:
       - "9117:9117"
     volumes:
       - ./Jackett:/config
+    healthcheck:
+      test: ["CMD", "curl", "-sfL", "-o", "/dev/null", "http://127.0.0.1:9117"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - app_network
+    logging: *default-logging
 
   db:
     image: postgres:16
@@ -34,8 +50,15 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - ./data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - app_network
+    logging: *default-logging
 
 networks:
   app_network:

@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     qbit_poll_interval_seconds: int = 30
     qbit_watch_timeout_seconds: int = 24 * 60 * 60
 
+    # Admin alerts: indexer down / low disk space (0 disables the monitor)
+    alert_check_interval_seconds: int = 1800
+    alert_free_space_gb: int = 10
+
     @property
     def qbit_enabled(self) -> bool:
         return bool(self.qbit_url and self.qbit_username and self.qbit_password)

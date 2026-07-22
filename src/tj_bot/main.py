@@ -13,12 +13,18 @@ from tj_bot.config import (
     load_settings,
     wait_for_jackett_api_key,
 )
-from tj_bot.db.engine import build_db_url, create_engine, create_session_pool
+from tj_bot.db.engine import (
+    SessionPool,
+    build_db_url,
+    create_engine,
+    create_session_pool,
+)
 from tj_bot.db.maintenance import cleanup_loop
 from tj_bot.db.migrate import run_migrations
 from tj_bot.handlers import routers_list
 from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
+from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
 from tj_bot.services.jackett import JackettClient
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
@@ -34,11 +40,17 @@ def setup_logging() -> None:
 
 
 def register_global_middlewares(
-    dp: Dispatcher, middlewares: list[ConfigMiddleware | DatabaseMiddleware]
+    dp: Dispatcher, config: AppConfig, session_pool: SessionPool
 ) -> None:
-    for middleware in middlewares:
-        dp.message.outer_middleware(middleware)
-        dp.callback_query.outer_middleware(middleware)
+    config_middleware = ConfigMiddleware(config)
+    database_middleware = DatabaseMiddleware(session_pool)
+    dp.message.outer_middleware(config_middleware)
+    # throttling sits after config (needs admin ids) and before the database
+    # so rate-limited spam never opens a session
+    dp.message.outer_middleware(ThrottlingMiddleware())
+    dp.message.outer_middleware(database_middleware)
+    dp.callback_query.outer_middleware(config_middleware)
+    dp.callback_query.outer_middleware(database_middleware)
 
 
 async def setup_qbittorrent(settings: Settings) -> QbittorrentClient | None:
@@ -87,10 +99,9 @@ async def main(settings: Settings) -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp["jackett"] = jackett
     dp["qbit"] = qbit
+    dp["started_at"] = datetime.datetime.now(datetime.UTC)
     dp.include_routers(*routers_list)
-    register_global_middlewares(
-        dp, [ConfigMiddleware(config), DatabaseMiddleware(session_pool)]
-    )
+    register_global_middlewares(dp, config, session_pool)
 
     cleanup_task = asyncio.create_task(
         cleanup_loop(

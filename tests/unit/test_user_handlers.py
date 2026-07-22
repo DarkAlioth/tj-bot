@@ -1,6 +1,6 @@
 import datetime
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from aiogram.filters import CommandObject
 from aiogram.types import Message
@@ -10,7 +10,8 @@ from tj_bot.db.models import SearchQuery, Torrent
 from tj_bot.db.repo import TorrentData, TorrentRepo
 from tj_bot.handlers.user import (
     ALL_CATEGORIES,
-    Pgn,
+    DEFAULT_SORT,
+    Pg2,
     category_token,
     go_search,
     render_page,
@@ -21,9 +22,10 @@ from tj_bot.services.jackett import JackettClient, JackettError
 
 
 def make_config(qbit_enabled: bool = False, admin: bool = False) -> AppConfig:
-    config = AsyncMock(spec=AppConfig)
+    config = MagicMock()
     config.qbit_enabled = qbit_enabled
     config.is_admin = lambda _user_id: admin
+    config.settings.search_cache_seconds = 3600
     return cast(AppConfig, config)
 
 
@@ -35,6 +37,7 @@ def make_torrent_model(**overrides: Any) -> Torrent:  # noqa: ANN401  # test hel
         "uploader": None,
         "description": None,
         "category": "Movies",
+        "tracker": "rutracker",
         "details_url": "https://tracker.example/1",
         "download_url": "http://jackett:9117/dl/1",
         "seeders": 5,
@@ -53,6 +56,7 @@ def make_item() -> TorrentData:
         uploader=None,
         description=None,
         category="Movies",
+        tracker="rutracker",
         details_url="https://tracker.example/1",
         download_url="http://jackett:9117/dl/1",
         seeders=5,
@@ -71,7 +75,9 @@ async def test_search_renders_first_result_card() -> None:
     sent = AsyncMock()
     message.answer.return_value = sent
     repo = AsyncMock(spec=TorrentRepo)
+    repo.find_recent_search.return_value = None
     repo.upsert_torrents.return_value = [1]
+    repo.create_search.return_value = 1
     repo.get_result_page.return_value = make_torrent_model()
     jackett = AsyncMock(spec=JackettClient)
     jackett.search.return_value = [make_item()]
@@ -94,6 +100,7 @@ async def test_search_failure_reports_to_user() -> None:
     repo = AsyncMock(spec=TorrentRepo)
     jackett = AsyncMock(spec=JackettClient)
     jackett.search.side_effect = JackettError("boom")
+    repo.find_recent_search.return_value = None
 
     await srch_torrent(
         cast(Message, message), repo, jackett, make_config(), make_command("x")
@@ -108,6 +115,7 @@ async def test_search_no_results_message() -> None:
     sent = AsyncMock()
     message.answer.return_value = sent
     repo = AsyncMock(spec=TorrentRepo)
+    repo.find_recent_search.return_value = None
     jackett = AsyncMock(spec=JackettClient)
     jackett.search.return_value = []
 
@@ -138,11 +146,11 @@ async def test_render_page_navigation_buttons() -> None:
     repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=3)
     repo.get_result_page.return_value = make_torrent_model()
 
-    await render_page(query, repo, make_config(), "qh", 1, ALL_CATEGORIES)
+    await render_page(query, repo, make_config(), "qh", 1, ALL_CATEGORIES, DEFAULT_SORT)
 
     keyboard = telegram_message.edit_text.await_args.kwargs["reply_markup"]
     labels = [button.text for row in keyboard.inline_keyboard for button in row]
-    assert labels == ["💾 Скачать", "🗂 Категории", "⬅", "➡"]
+    assert labels == ["💾 Скачать", "🗂 Категории", "↕ Сиды", "⬅", "🔄", "➡"]
 
     callbacks = [
         button.callback_data
@@ -161,7 +169,7 @@ async def test_categories_menu_has_back_button_to_origin_card() -> None:
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=3)
     repo.get_categories.return_value = [("Movies", 2), ("Audio", 1)]
-    origin = Pgn(type="go_search", qh="qh", page=4, srch=category_token("Movies"))
+    origin = Pg2(t="gs", qh="qh", p=4, c=category_token("Movies"), s="se")
 
     await go_search(query, origin, repo)
 
@@ -172,10 +180,92 @@ async def test_categories_menu_has_back_button_to_origin_card() -> None:
 
     back = rows[-1][0]
     assert back.text == "◀️ Назад"
-    unpacked = Pgn.unpack(back.callback_data)
-    assert unpacked.type == "fs"
-    assert unpacked.page == 4
-    assert unpacked.srch == category_token("Movies")
+    unpacked = Pg2.unpack(back.callback_data)
+    assert unpacked.t == "fs"
+    assert unpacked.p == 4
+    assert unpacked.c == category_token("Movies")
     assert all(
         len(b.callback_data.encode()) <= 64 for r in rows for b in r if b.callback_data
     )
+
+
+async def test_instant_cache_hit_skips_jackett() -> None:
+    message = AsyncMock()
+    sent = AsyncMock()
+    message.answer.return_value = sent
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.find_recent_search.return_value = SearchQuery(
+        id=5, hash="qh", query_text="ubuntu", result_count=2
+    )
+    repo.get_result_page.return_value = make_torrent_model()
+    jackett = AsyncMock(spec=JackettClient)
+
+    await srch_torrent(
+        cast(Message, message), repo, jackett, make_config(), make_command("Ubuntu")
+    )
+
+    jackett.search.assert_not_awaited()
+    repo.record_search_event.assert_awaited_once()
+    card = sent.edit_text.await_args.args[0]
+    assert "⚡" in card
+
+
+async def test_refresh_button_forces_new_search() -> None:
+    from tj_bot.handlers.user import Upd, refresh_search
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    telegram_message.answer = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(
+        id=5, hash="qh", query_text="ubuntu", result_count=2
+    )
+    repo.find_recent_search.return_value = None
+    repo.upsert_torrents.return_value = [1]
+    repo.create_search.return_value = 5
+    repo.get_result_page.return_value = make_torrent_model()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.search.return_value = [make_item()]
+
+    await refresh_search(query, Upd(qh="qh"), repo, jackett, make_config())
+
+    jackett.search.assert_awaited_once_with("ubuntu")
+
+
+async def test_history_empty_and_filled() -> None:
+    from tj_bot.handlers.user import show_history
+
+    message = AsyncMock(spec=Message)
+    message.answer = AsyncMock()
+    message.from_user = MagicMock()
+    message.from_user.id = 42
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_user_history.return_value = []
+
+    await show_history(cast(Message, message), repo)
+    assert "пуста" in message.answer.await_args.args[0]
+
+    repo.get_user_history.return_value = [(1, "ubuntu iso"), (2, "debian")]
+    await show_history(cast(Message, message), repo)
+    keyboard = message.answer.await_args.kwargs["reply_markup"]
+    assert [row[0].text for row in keyboard.inline_keyboard] == [
+        "ubuntu iso",
+        "debian",
+    ]
+
+
+async def test_history_replay_stale_query_alerts() -> None:
+    from tj_bot.handlers.user import Hst, replay_history
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_query_text.return_value = None
+    jackett = AsyncMock(spec=JackettClient)
+
+    await replay_history(query, Hst(qid=9), repo, jackett, make_config())
+
+    assert query.answer.await_args.kwargs.get("show_alert") is True

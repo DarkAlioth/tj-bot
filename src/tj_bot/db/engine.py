@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import (
 
 from tj_bot.config import Settings
 
+SessionPool = async_sessionmaker[AsyncSession]
+
 
 def build_db_url(settings: Settings) -> URL:
     return URL.create(

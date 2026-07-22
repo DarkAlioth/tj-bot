@@ -5,11 +5,11 @@ from typing import Any
 
 from aiogram import Router, types
 from aiogram.enums import ParseMode
-from aiogram.filters import BaseFilter, Command
+from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import CallbackQuery, Message, TelegramObject
+from aiogram.types import CallbackQuery, Message
 
-from tj_bot.config import AppConfig
+from tj_bot.filters.admin import AdminOnly
 from tj_bot.services.qbittorrent import (
     QbittorrentClient,
     QbittorrentError,
@@ -23,12 +23,6 @@ qbit_router = Router()
 PAGE_SIZE = 6
 NAME_LIMIT = 34
 UNAVAILABLE_TEXT = "qBittorrent недоступен 🛠"
-
-
-class AdminOnly(BaseFilter):
-    async def __call__(self, event: TelegramObject, config: AppConfig) -> bool:
-        user = getattr(event, "from_user", None)
-        return config.is_admin(user.id if user else None)
 
 
 qbit_router.message.filter(AdminOnly())

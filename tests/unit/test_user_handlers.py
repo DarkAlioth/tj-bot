@@ -9,7 +9,9 @@ from tj_bot.db.models import SearchQuery, Torrent
 from tj_bot.db.repo import TorrentData, TorrentRepo
 from tj_bot.handlers.user import (
     ALL_CATEGORIES,
+    Pgn,
     category_token,
+    go_search,
     render_page,
     resolve_category,
     srch_torrent,
@@ -135,3 +137,31 @@ async def test_render_page_navigation_buttons() -> None:
         if button.callback_data
     ]
     assert all(len(data.encode()) <= 64 for data in callbacks)
+
+
+async def test_categories_menu_has_back_button_to_origin_card() -> None:
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=3)
+    repo.get_categories.return_value = [("Movies", 2), ("Audio", 1)]
+    origin = Pgn(type="go_search", qh="qh", page=4, srch=category_token("Movies"))
+
+    await go_search(query, origin, repo)
+
+    keyboard = telegram_message.edit_text.await_args.kwargs["reply_markup"]
+    rows = keyboard.inline_keyboard
+    assert rows[0][0].text == "Все - 3"
+    assert [b.text for b in rows[1]] == ["Movies - 2", "Audio - 1"]
+
+    back = rows[-1][0]
+    assert back.text == "◀️ Назад"
+    unpacked = Pgn.unpack(back.callback_data)
+    assert unpacked.type == "fs"
+    assert unpacked.page == 4
+    assert unpacked.srch == category_token("Movies")
+    assert all(
+        len(b.callback_data.encode()) <= 64 for r in rows for b in r if b.callback_data
+    )

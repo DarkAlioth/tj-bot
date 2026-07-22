@@ -8,9 +8,13 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.filters.command import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
+from tj_bot.config import AppConfig
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.services.jackett import DownloadTooLargeError, JackettClient, JackettError
+
+# Dlt with type="server" is handled by the admin router
+__all__ = ["Dlt", "Pgn", "result_keyboard", "user_router"]
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +82,7 @@ def result_keyboard(
     srch: str,
     has_prev: bool,
     has_next: bool,
+    show_server: bool = False,
 ) -> types.InlineKeyboardMarkup:
     top = [
         types.InlineKeyboardButton(
@@ -91,6 +96,16 @@ def result_keyboard(
             callback_data=Pgn(type="go_search", qh=qh, page=page, srch=srch).pack(),
         ),
     ]
+    kb = [top]
+    if show_server:
+        kb.append(
+            [
+                types.InlineKeyboardButton(
+                    text="⬇️ На сервер",
+                    callback_data=Dlt(type="server", hash=torrent_hash).pack(),
+                )
+            ]
+        )
     nav = []
     if has_prev:
         nav.append(
@@ -106,7 +121,6 @@ def result_keyboard(
                 callback_data=Pgn(type="go_next", qh=qh, page=page, srch=srch).pack(),
             )
         )
-    kb = [top]
     if nav:
         kb.append(nav)
     return types.InlineKeyboardMarkup(inline_keyboard=kb)
@@ -123,6 +137,7 @@ async def srch_torrent(
     message: Message,
     repo: TorrentRepo,
     jackett: JackettClient,
+    config: AppConfig,
     command: CommandObject,
 ) -> None:
     if command.args is None:
@@ -154,8 +169,17 @@ async def srch_torrent(
     if torrent is None:
         await srch_message.edit_text(NOT_FOUND_TEXT)
         return
+    show_server = config.qbit_enabled and config.is_admin(
+        message.from_user.id if message.from_user else None
+    )
     keyboard = result_keyboard(
-        torrent.hash, qh, 0, ALL_CATEGORIES, has_prev=False, has_next=counter > 1
+        torrent.hash,
+        qh,
+        0,
+        ALL_CATEGORIES,
+        has_prev=False,
+        has_next=counter > 1,
+        show_server=show_server,
     )
     await srch_message.edit_text(
         "\n".join(text_srch_msg(1, counter, torrent)),
@@ -195,7 +219,12 @@ async def hash_callback(
 
 
 async def render_page(
-    query: CallbackQuery, repo: TorrentRepo, qh: str, page: int, srch: str
+    query: CallbackQuery,
+    repo: TorrentRepo,
+    config: AppConfig,
+    qh: str,
+    page: int,
+    srch: str,
 ) -> None:
     message = query.message
     search = await repo.get_search(qh)
@@ -212,6 +241,9 @@ async def render_page(
     if torrent is None:
         await query.answer()
         return
+    show_server = config.qbit_enabled and config.is_admin(
+        query.from_user.id if query.from_user else None
+    )
     keyboard = result_keyboard(
         torrent.hash,
         qh,
@@ -219,6 +251,7 @@ async def render_page(
         srch,
         has_prev=page > 0,
         has_next=page + 1 < counter,
+        show_server=show_server,
     )
     await query.answer()
     await message.edit_text(
@@ -230,25 +263,39 @@ async def render_page(
 
 
 @user_router.callback_query(Pgn.filter(F.type == "go_priv"))
-async def go_priv(query: CallbackQuery, callback_data: Pgn, repo: TorrentRepo) -> None:
+async def go_priv(
+    query: CallbackQuery, callback_data: Pgn, repo: TorrentRepo, config: AppConfig
+) -> None:
     await render_page(
-        query, repo, callback_data.qh, callback_data.page - 1, callback_data.srch
+        query,
+        repo,
+        config,
+        callback_data.qh,
+        callback_data.page - 1,
+        callback_data.srch,
     )
 
 
 @user_router.callback_query(Pgn.filter(F.type == "go_next"))
-async def go_next(query: CallbackQuery, callback_data: Pgn, repo: TorrentRepo) -> None:
+async def go_next(
+    query: CallbackQuery, callback_data: Pgn, repo: TorrentRepo, config: AppConfig
+) -> None:
     await render_page(
-        query, repo, callback_data.qh, callback_data.page + 1, callback_data.srch
+        query,
+        repo,
+        config,
+        callback_data.qh,
+        callback_data.page + 1,
+        callback_data.srch,
     )
 
 
 @user_router.callback_query(Pgn.filter(F.type == "fs"))
 async def go_searched(
-    query: CallbackQuery, callback_data: Pgn, repo: TorrentRepo
+    query: CallbackQuery, callback_data: Pgn, repo: TorrentRepo, config: AppConfig
 ) -> None:
     await render_page(
-        query, repo, callback_data.qh, callback_data.page, callback_data.srch
+        query, repo, config, callback_data.qh, callback_data.page, callback_data.srch
     )
 
 

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 from aiogram.filters import CommandObject
 from aiogram.types import Message
 
+from tj_bot.config import AppConfig
 from tj_bot.db.models import SearchQuery, Torrent
 from tj_bot.db.repo import TorrentData, TorrentRepo
 from tj_bot.handlers.user import (
@@ -17,6 +18,13 @@ from tj_bot.handlers.user import (
     srch_torrent,
 )
 from tj_bot.services.jackett import JackettClient, JackettError
+
+
+def make_config(qbit_enabled: bool = False, admin: bool = False) -> AppConfig:
+    config = AsyncMock(spec=AppConfig)
+    config.qbit_enabled = qbit_enabled
+    config.is_admin = lambda _user_id: admin
+    return cast(AppConfig, config)
 
 
 def make_torrent_model(**overrides: Any) -> Torrent:  # noqa: ANN401  # test helper
@@ -68,7 +76,9 @@ async def test_search_renders_first_result_card() -> None:
     jackett = AsyncMock(spec=JackettClient)
     jackett.search.return_value = [make_item()]
 
-    await srch_torrent(cast(Message, message), repo, jackett, make_command("ubuntu"))
+    await srch_torrent(
+        cast(Message, message), repo, jackett, make_config(), make_command("ubuntu")
+    )
 
     jackett.search.assert_awaited_once_with("ubuntu")
     repo.create_search.assert_awaited_once()
@@ -85,7 +95,9 @@ async def test_search_failure_reports_to_user() -> None:
     jackett = AsyncMock(spec=JackettClient)
     jackett.search.side_effect = JackettError("boom")
 
-    await srch_torrent(cast(Message, message), repo, jackett, make_command("x"))
+    await srch_torrent(
+        cast(Message, message), repo, jackett, make_config(), make_command("x")
+    )
 
     assert "недоступен" in sent.edit_text.await_args.args[0]
     repo.upsert_torrents.assert_not_awaited()
@@ -99,7 +111,9 @@ async def test_search_no_results_message() -> None:
     jackett = AsyncMock(spec=JackettClient)
     jackett.search.return_value = []
 
-    await srch_torrent(cast(Message, message), repo, jackett, make_command("x"))
+    await srch_torrent(
+        cast(Message, message), repo, jackett, make_config(), make_command("x")
+    )
 
     assert "не найдено" in sent.edit_text.await_args.args[0]
 
@@ -124,7 +138,7 @@ async def test_render_page_navigation_buttons() -> None:
     repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=3)
     repo.get_result_page.return_value = make_torrent_model()
 
-    await render_page(query, repo, "qh", 1, ALL_CATEGORIES)
+    await render_page(query, repo, make_config(), "qh", 1, ALL_CATEGORIES)
 
     keyboard = telegram_message.edit_text.await_args.kwargs["reply_markup"]
     labels = [button.text for row in keyboard.inline_keyboard for button in row]

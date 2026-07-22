@@ -21,6 +21,7 @@ from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.services import broadcaster
 from tj_bot.services.jackett import JackettClient
+from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,31 @@ def register_global_middlewares(
         dp.callback_query.outer_middleware(middleware)
 
 
+async def setup_qbittorrent(settings: Settings) -> QbittorrentClient | None:
+    """Build and log in the qBittorrent client, or None if unconfigured."""
+    if not (
+        settings.qbit_enabled
+        and settings.qbit_url
+        and settings.qbit_username
+        and settings.qbit_password
+    ):
+        logger.info("qBittorrent integration disabled (not configured)")
+        return None
+    client = QbittorrentClient(
+        base_url=settings.qbit_url,
+        username=settings.qbit_username,
+        password=settings.qbit_password,
+    )
+    try:
+        await client.login()
+    except QbittorrentError:
+        logger.exception("qBittorrent login failed; integration disabled")
+        await client.close()
+        return None
+    logger.info("qBittorrent integration enabled")
+    return client
+
+
 async def main(settings: Settings) -> None:
     jackett_api_key = await wait_for_jackett_api_key(settings)
     config = AppConfig(
@@ -55,10 +81,12 @@ async def main(settings: Settings) -> None:
         timeout_seconds=settings.jackett_timeout_seconds,
         download_max_bytes=settings.download_max_bytes,
     )
+    qbit = await setup_qbittorrent(settings)
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
     dp["jackett"] = jackett
+    dp["qbit"] = qbit
     dp.include_routers(*routers_list)
     register_global_middlewares(
         dp, [ConfigMiddleware(config), DatabaseMiddleware(session_pool)]
@@ -78,6 +106,8 @@ async def main(settings: Settings) -> None:
     finally:
         cleanup_task.cancel()
         await jackett.close()
+        if qbit is not None:
+            await qbit.close()
         await engine.dispose()
 
 

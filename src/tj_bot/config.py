@@ -30,6 +30,18 @@ class Settings(BaseSettings):
     cache_ttl_days: int = 7
     cleanup_interval_seconds: int = 3600
 
+    # Send-to-server via qBittorrent (admin only). Disabled unless all three set.
+    qbit_url: str | None = None
+    qbit_username: str | None = None
+    qbit_password: str | None = None
+    qbit_category: str | None = "tj-bot"
+    qbit_poll_interval_seconds: int = 30
+    qbit_watch_timeout_seconds: int = 24 * 60 * 60
+
+    @property
+    def qbit_enabled(self) -> bool:
+        return bool(self.qbit_url and self.qbit_username and self.qbit_password)
+
     @field_validator("admins", mode="before")
     @classmethod
     def _parse_admins(cls, value: object) -> object:
@@ -58,6 +70,13 @@ class AppConfig:
     @property
     def admin_ids(self) -> list[int]:
         return self.settings.admins
+
+    @property
+    def qbit_enabled(self) -> bool:
+        return self.settings.qbit_enabled
+
+    def is_admin(self, user_id: int | None) -> bool:
+        return user_id is not None and user_id in self.settings.admins
 
 
 async def wait_for_jackett_api_key(

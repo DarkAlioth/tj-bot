@@ -10,7 +10,7 @@ from aiogram.filters.command import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from tj_bot.config import AppConfig
-from tj_bot.db.models import Subscription, Torrent
+from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
@@ -56,12 +56,6 @@ class Upd(CallbackData, prefix="upd"):
 
 class Hst(CallbackData, prefix="hst"):
     qid: int
-
-
-class Sub(CallbackData, prefix="sub"):
-    a: str
-    i: int
-    qh: str
 
 
 def normalize_query(raw: str) -> str:
@@ -126,38 +120,37 @@ def result_keyboard(
     def pg2(t: str, p: int = page, c: str = cat, s: str = sort) -> str:
         return Pg2(t=t, qh=qh, p=p, c=c, s=s).pack()
 
+    # row 1: categories + sort
     kb = [
         [
-            types.InlineKeyboardButton(
-                text="💾 Скачать",
-                callback_data=Dlt(type="download", hash=torrent_hash).pack(),
-            ),
             types.InlineKeyboardButton(
                 # carries the current position so the menu's back button can
                 # return to exactly this card
                 text="🗂 Категории",
                 callback_data=pg2("gs"),
             ),
+            types.InlineKeyboardButton(
+                text=SORT_LABELS.get(sort, SORT_LABELS[DEFAULT_SORT]),
+                callback_data=pg2("fs", p=0, s=SORT_NEXT.get(sort, DEFAULT_SORT)),
+            ),
         ]
     ]
-    tools = [
+    # row 2: download (+ send-to-server for admins)
+    download_row = [
         types.InlineKeyboardButton(
-            text=SORT_LABELS.get(sort, SORT_LABELS[DEFAULT_SORT]),
-            callback_data=pg2("fs", p=0, s=SORT_NEXT.get(sort, DEFAULT_SORT)),
-        ),
-        types.InlineKeyboardButton(
-            text="🔔",
-            callback_data=Sub(a="add", i=0, qh=qh).pack(),
-        ),
+            text="💾 Скачать",
+            callback_data=Dlt(type="download", hash=torrent_hash).pack(),
+        )
     ]
     if show_server:
-        tools.append(
+        download_row.append(
             types.InlineKeyboardButton(
                 text="⬇️ На сервер",
                 callback_data=Dlt(type="server", hash=torrent_hash).pack(),
             )
         )
-    kb.append(tools)
+    kb.append(download_row)
+    # row 3: navigation
     nav = []
     if has_prev:
         nav.append(types.InlineKeyboardButton(text="⬅", callback_data=pg2("pv")))
@@ -524,90 +517,3 @@ async def go_search(
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,
     )
-
-
-def subs_view(
-    subscriptions: list[Subscription],
-) -> tuple[str, types.InlineKeyboardMarkup | None]:
-    if not subscriptions:
-        return (
-            "Подписок нет. Нажмите 🔔 на карточке поиска, чтобы следить "
-            "за новинками по запросу.",
-            None,
-        )
-    rows = [
-        [
-            types.InlineKeyboardButton(
-                text=f"❌ {sub.query_text}",
-                callback_data=Sub(a="del", i=sub.id, qh="").pack(),
-            )
-        ]
-        for sub in subscriptions
-    ]
-    text = (
-        "🔔 <b>Подписки</b> — бот проверяет новинки по расписанию.\n"
-        "Нажмите, чтобы отписаться:"
-    )
-    return text, types.InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-@user_router.callback_query(Sub.filter(F.a == "add"))
-async def subscribe(
-    query: CallbackQuery,
-    callback_data: Sub,
-    repo: TorrentRepo,
-    config: AppConfig,
-) -> None:
-    message = query.message
-    user = query.from_user
-    if not isinstance(message, Message) or user is None:
-        await query.answer()
-        return
-    search = await repo.get_search(callback_data.qh)
-    if search is None or not search.query_text:
-        await query.answer(STALE_QUERY_TEXT, show_alert=True)
-        return
-    if not config.is_admin(user.id):
-        count = await repo.count_subscriptions(user.id)
-        if count >= config.settings.subscriptions_per_user:
-            await query.answer(
-                f"Лимит подписок: {config.settings.subscriptions_per_user}. "
-                "Удалите лишние: /subs",
-                show_alert=True,
-            )
-            return
-    subscription = await repo.create_subscription(
-        user.id, message.chat.id, search.query_text
-    )
-    if subscription is None:
-        await query.answer("Вы уже подписаны на этот запрос ✔")
-        return
-    # prefill so only future results count as news
-    await repo.add_seen_hashes(
-        subscription.id, await repo.get_result_hashes(callback_data.qh)
-    )
-    await query.answer("🔔 Подписка создана — сообщу о новинках")
-
-
-@user_router.message(Command("subs"))
-async def list_subs(message: Message, repo: TorrentRepo) -> None:
-    user_id = message.from_user.id if message.from_user else None
-    if user_id is None:
-        return
-    text, keyboard = subs_view(list(await repo.list_subscriptions(user_id)))
-    await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
-
-
-@user_router.callback_query(Sub.filter(F.a == "del"))
-async def unsubscribe(
-    query: CallbackQuery, callback_data: Sub, repo: TorrentRepo
-) -> None:
-    message = query.message
-    user = query.from_user
-    if not isinstance(message, Message) or user is None:
-        await query.answer()
-        return
-    removed = await repo.delete_subscription(callback_data.i, user.id)
-    await query.answer("Подписка удалена" if removed else "Уже удалена")
-    text, keyboard = subs_view(list(await repo.list_subscriptions(user.id)))
-    await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)

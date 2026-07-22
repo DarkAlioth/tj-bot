@@ -7,7 +7,9 @@ from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
 
 from tj_bot.config import (
     AppConfig,
@@ -75,6 +77,31 @@ def register_global_middlewares(
         observer.outer_middleware(database_middleware)
 
 
+USER_COMMANDS = [
+    BotCommand(command="s", description="🔎 Поиск торрентов"),
+    BotCommand(command="history", description="🕘 История поиска"),
+    BotCommand(command="subs", description="🔔 Мои подписки"),
+]
+ADMIN_ONLY_COMMANDS = [
+    BotCommand(command="dl", description="🖥 Консоль qBittorrent"),
+    BotCommand(command="stats", description="📊 Статистика"),
+    BotCommand(command="indexers", description="🧲 Индексеры Jackett"),
+]
+
+
+async def set_bot_commands(bot: Bot, config: AppConfig) -> None:
+    """Publish the command menu: shared commands for all, extras for admins."""
+    try:
+        await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+        for admin_id in config.admin_ids:
+            await bot.set_my_commands(
+                USER_COMMANDS + ADMIN_ONLY_COMMANDS,
+                scope=BotCommandScopeChat(chat_id=admin_id),
+            )
+    except TelegramAPIError:
+        logger.exception("Failed to publish bot commands")
+
+
 async def setup_qbittorrent(settings: Settings) -> QbittorrentClient | None:
     """Build and log in the qBittorrent client, or None if unconfigured."""
     if not (
@@ -124,6 +151,7 @@ async def main(settings: Settings) -> None:
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
     dp.include_routers(*routers_list)
     register_global_middlewares(dp, config, session_pool)
+    await set_bot_commands(bot, config)
 
     cleanup_task = asyncio.create_task(
         cleanup_loop(

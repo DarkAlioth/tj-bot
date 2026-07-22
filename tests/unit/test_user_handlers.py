@@ -325,3 +325,57 @@ async def test_filter_menu_apply_renders_page() -> None:
     # applied filter -> counted with filters, page rendered
     repo.count_results.assert_awaited()
     telegram_message.edit_text.assert_awaited()
+
+
+async def test_render_page_carries_filter_into_buttons() -> None:
+    from tj_bot.handlers.user import render_page
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=5)
+    repo.count_results.return_value = 5
+    repo.get_result_page.return_value = make_torrent_model()
+
+    await render_page(query, repo, make_config(), "qh", 1, "ALL", "se", "230")
+
+    kb = telegram_message.edit_text.await_args.kwargs["reply_markup"]
+    from tj_bot.handlers.user import Flt, Pg2
+
+    fls = []
+    for row in kb.inline_keyboard:
+        for b in row:
+            if b.callback_data and b.callback_data.startswith("pg2:"):
+                fls.append(Pg2.unpack(b.callback_data).fl)
+            if b.callback_data and b.callback_data.startswith("flt:"):
+                fls.append(Flt.unpack(b.callback_data).fl)
+    # every pagination/filter button keeps the applied filter code, not "000"
+    assert fls and all(x == "230" for x in fls)
+
+
+async def test_filter_reset_applies_default() -> None:
+    from tj_bot.handlers.user import Flt, filter_menu
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=5)
+    repo.get_result_page.return_value = make_torrent_model()
+
+    # reset from an active filter -> renders the unfiltered card (no count_results
+    # needed because category is ALL and filter is cleared)
+    await filter_menu(
+        query, Flt(a="rs", qh="qh", c="ALL", s="se", fl="230"), repo, make_config()
+    )
+
+    kb = telegram_message.edit_text.await_args.kwargs["reply_markup"]
+    from tj_bot.handlers.user import Pg2
+
+    for row in kb.inline_keyboard:
+        for b in row:
+            if b.callback_data and b.callback_data.startswith("pg2:"):
+                assert Pg2.unpack(b.callback_data).fl == "000"

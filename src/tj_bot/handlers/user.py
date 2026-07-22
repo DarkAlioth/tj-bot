@@ -439,6 +439,7 @@ async def render_page(
         has_prev=page > 0,
         has_next=page + 1 < counter,
         show_server=show_server,
+        flt=flt,
     )
     await query.answer()
     await message.edit_text(
@@ -604,7 +605,9 @@ async def filter_menu(
     if not isinstance(message, Message):
         await query.answer()
         return
-    if callback_data.a == "ap":
+    if callback_data.a in ("ap", "rs"):
+        # apply the working filter, or reset to none — both return to the card
+        applied = DEFAULT_FILTER if callback_data.a == "rs" else callback_data.fl
         await render_page(
             query,
             repo,
@@ -613,7 +616,7 @@ async def filter_menu(
             0,
             callback_data.c,
             callback_data.s,
-            callback_data.fl,
+            applied,
         )
         return
     text, keyboard = build_filter_menu(

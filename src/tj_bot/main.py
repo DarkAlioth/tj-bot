@@ -86,6 +86,7 @@ USER_COMMANDS = [
 ]
 ADMIN_ONLY_COMMANDS = [
     BotCommand(command="dl", description="🖥 Консоль qBittorrent"),
+    BotCommand(command="health", description="🩺 Состояние сервиса"),
     BotCommand(command="stats", description="📊 Статистика"),
     BotCommand(command="indexers", description="🧲 Индексеры Jackett"),
     BotCommand(command="users", description="👥 Пользователи"),

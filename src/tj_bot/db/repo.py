@@ -278,6 +278,10 @@ class TorrentRepo:
         rows = (await self.session.execute(stmt)).all()
         return [(row[0], row[1]) for row in rows]
 
+    async def db_size(self) -> int:
+        stmt = select(func.pg_database_size(func.current_database()))
+        return int((await self.session.execute(stmt)).scalar_one())
+
     async def get_torrent_by_hash(self, torrent_hash: str) -> Torrent | None:
         stmt = select(Torrent).where(Torrent.hash == torrent_hash)
         return (await self.session.execute(stmt)).scalar_one_or_none()

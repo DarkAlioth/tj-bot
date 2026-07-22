@@ -216,3 +216,23 @@ async def test_sort_orders(session: AsyncSession) -> None:
     assert top_seeders is not None and top_seeders.hash == "s"
     assert top_size is not None and top_size.hash == "b"
     assert top_date is not None and top_date.hash == "s"
+
+
+async def test_subscription_lifecycle(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+
+    sub = await repo.create_subscription(42, 777, "ubuntu iso")
+    assert sub is not None
+    assert await repo.create_subscription(42, 777, "ubuntu iso") is None
+    assert await repo.count_subscriptions(42) == 1
+
+    await repo.add_seen_hashes(sub.id, ["h1", "h2", "h1"])
+    assert await repo.seen_hashes(sub.id) == {"h1", "h2"}
+
+    await repo.touch_subscription(sub.id)
+    subs = await repo.list_subscriptions(42)
+    assert subs[0].last_checked_at is not None
+
+    assert await repo.delete_subscription(sub.id, user_id=999) is False
+    assert await repo.delete_subscription(sub.id, user_id=42) is True
+    assert await repo.list_subscriptions(42) == []

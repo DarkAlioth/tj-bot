@@ -1,0 +1,75 @@
+[project]
+name = "tj-bot"
+version = "0.1.0"
+description = "Telegram bot for torrent search via Jackett with PostgreSQL-backed result cache"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.30.0",
+    "aiohttp>=3.12.0",
+    "environs>=15.0.1",
+    "python-dateutil>=2.9.0",
+    "betterlogging>=1.0.0",
+    "psycopg2-binary>=2.9.10",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.0",
+    "mypy>=2.3.0",
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "bandit>=1.9.0",
+    "pip-audit>=2.10.0",
+    "types-python-dateutil>=2.9.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "S", "UP", "ANN", "B", "C4", "PTH"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy modules pending refactoring (removed module-by-module in follow-up PRs)
+"bot.py" = ["ANN", "S", "E501", "UP", "B", "F401"]
+"tgbot/**" = ["ANN", "S", "E501", "E722", "UP", "B", "F401", "E741", "N", "C4", "PTH"]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+files = ["bot.py", "tgbot", "tests"]
+
+# Legacy modules pending refactoring (removed module-by-module in follow-up PRs)
+[[tool.mypy.overrides]]
+module = ["bot", "tgbot.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["betterlogging.*", "environs.*", "psycopg2.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "--cov --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+source = ["tgbot"]
+# Legacy modules pending refactoring join coverage as they are rewritten
+omit = [
+    "tgbot/handlers/*",
+    "tgbot/middlewares/database.py",
+    "tgbot/config.py",
+]
+
+[tool.bandit]
+exclude_dirs = [".venv", "tests", "data", "Jackett"]

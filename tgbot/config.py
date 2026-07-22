@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+
 from environs import Env
 
 env = Env()
@@ -60,5 +61,5 @@ def load_config(path: str = None) -> Config:
     return Config(
         tg_bot=TgBot.from_env(env),
         jackett=JackettApi.from_config(jackett_config_path),
-        misc=Miscellaneous()
+        misc=Miscellaneous(),
     )

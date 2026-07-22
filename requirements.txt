@@ -1,9 +1,0 @@
-python-dotenv
-python-dateutil
-environs
-betterlogging
-aiogram
-aiofiles
-aiohttp
-psycopg2-binary
-typing_extensions

@@ -1,4 +1,4 @@
-from aiogram import types, Router, F
+from aiogram import F, Router, types
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.markdown import hcode
@@ -10,8 +10,8 @@ echo_router = Router()
 async def bot_echo(message: types.Message):
     text = [
         f"⠀\n⠀Вы написали: {message.text}\n",
-        f"Для поиска используйте:",
-        f"<code>/s {message.text}</code>\n⠀"
+        "Для поиска используйте:",
+        f"<code>/s {message.text}</code>\n⠀",
     ]
 
     await message.answer("\n".join(text))

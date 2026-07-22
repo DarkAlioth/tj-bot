@@ -1,7 +1,7 @@
 from aiogram import Router
 from aiogram.enums import ParseMode
-from aiogram.types import Message
 from aiogram.filters.command import Command, CommandStart
+from aiogram.types import Message
 
 from tgbot.filters.admin import AdminFilter
 
@@ -11,9 +11,7 @@ admin_router.message.filter(AdminFilter())
 
 @admin_router.message(CommandStart(deep_link=True))
 async def admin_start(message: Message, command):
-    text = [
-        command.args
-    ]
+    text = [command.args]
     await message.answer("\n".join(text), parse_mode=ParseMode.HTML)
 
 

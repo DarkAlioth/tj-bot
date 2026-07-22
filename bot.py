@@ -3,9 +3,10 @@ import logging
 
 import betterlogging as bl
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
-from tgbot.config import load_config, Config
+from aiogram.fsm.storage.memory import MemoryStorage
+
+from tgbot.config import Config, load_config
 from tgbot.handlers import routers_list
 from tgbot.middlewares.config import ConfigMiddleware
 from tgbot.services import broadcaster
@@ -39,7 +40,7 @@ def setup_logging():
 
 
 def get_storage(config):
-        return MemoryStorage()
+    return MemoryStorage()
 
 
 async def main():
@@ -48,7 +49,9 @@ async def main():
     config = load_config(".env")
     storage = get_storage(config)
 
-    bot = Bot(token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML"))
+    bot = Bot(
+        token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML")
+    )
 
     dp = Dispatcher(storage=storage)
 

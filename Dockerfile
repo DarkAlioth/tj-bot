@@ -9,7 +9,12 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --no-install-project
+
+COPY README.md ./
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
 
 FROM python:3.13-slim
 
@@ -20,9 +25,7 @@ RUN groupadd -r bot && useradd -r -g bot -d /app bot
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
-COPY bot.py ./
-COPY tgbot ./tgbot
 
 USER bot
 
-CMD ["python", "bot.py"]
+CMD ["tj-bot"]

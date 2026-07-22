@@ -209,15 +209,6 @@ wheels = [
 ]
 
 [[package]]
-name = "betterlogging"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a1/fb/9f400b2faedab8229698356580de53e97cf3569d40a3a826d07773e762eb/betterlogging-1.0.0.tar.gz", hash = "sha256:324fab02af0a1a6ea05869ac8dd5b1bcfa59f6fa882cf75e24dfa99f412f54d3", size = 10154, upload-time = "2024-02-05T07:59:47.675Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/9b/db1ed2b226a3dd243a09e449a21797e8c386fbce22f8c559a88b5c40de90/betterlogging-1.0.0-py3-none-any.whl", hash = "sha256:b20f4d39af98faf540e9c3fe3d0a08872b3c5da0d02724e7c33be7358aae2a7b", size = 10887, upload-time = "2024-02-05T07:59:46.103Z" },
-]
-
-[[package]]
 name = "boolean-py"
 version = "5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -386,19 +377,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
-]
-
-[[package]]
-name = "environs"
-version = "15.0.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "marshmallow" },
-    { name = "python-dotenv" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/f4/0273d36ab287a00866b69d4008e2ed2e479e4bc1eef4f8be2708f30ad15f/environs-15.0.1.tar.gz", hash = "sha256:638106bfb5d8c9a13ee51c23a9f2416baf9a748c8e537fec771102927cd02aa8", size = 36385, upload-time = "2026-04-06T14:15:12.676Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/fb/11e461eb609792f9f439398eb5f400fb4130ff2b9b59e0ceb346bb830a17/environs-15.0.1-py3-none-any.whl", hash = "sha256:a6aeb3e18d5649a4e74f62984f0d84ec869269cff588a43685272c72b5b8979b", size = 17357, upload-time = "2026-04-06T14:15:11.118Z" },
 ]
 
 [[package]]
@@ -581,15 +559,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/06/ff/7841249c247aa650a76b9ee4bbaeae59370dc8bfd2f6c01f3630c35eb134/markdown_it_py-4.2.0.tar.gz", hash = "sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49", size = 82454, upload-time = "2026-05-07T12:08:28.36Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl", hash = "sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a", size = 91687, upload-time = "2026-05-07T12:08:27.182Z" },
-]
-
-[[package]]
-name = "marshmallow"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/25/7e/1dbd4096eb7c148cd2841841916f78820bb85a4d80a0c25c02d30815a7fb/marshmallow-4.3.0.tar.gz", hash = "sha256:fb43c53b3fe240b8f6af37223d6ef1636f927ad9bea8ab323afad95dff090880", size = 224485, upload-time = "2026-04-03T21:46:32.72Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/e0/ff24e25218bb59eb6290a530cea40651b14068b6e3659b20f9c175179632/marshmallow-4.3.0-py3-none-any.whl", hash = "sha256:46c4fe6984707e3cbd485dfebbf0a59874f58d695aad05c1668d15e8c6e13b46", size = 49148, upload-time = "2026-04-03T21:46:31.241Z" },
 ]
 
 [[package]]
@@ -1061,6 +1030,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pydantic-settings"
+version = "2.14.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5c/b5/8f48e906c3e0205276e8bd8cb7512217a87b2685304d64be27cad5b3019f/pydantic_settings-2.14.2.tar.gz", hash = "sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f", size = 237700, upload-time = "2026-06-19T13:44:56.324Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl", hash = "sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440", size = 61715, upload-time = "2026-06-19T13:44:55.02Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1260,13 +1243,12 @@ wheels = [
 [[package]]
 name = "tj-bot"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiogram" },
     { name = "aiohttp" },
-    { name = "betterlogging" },
-    { name = "environs" },
     { name = "psycopg2-binary" },
+    { name = "pydantic-settings" },
     { name = "python-dateutil" },
 ]
 
@@ -1286,9 +1268,8 @@ dev = [
 requires-dist = [
     { name = "aiogram", specifier = ">=3.30.0" },
     { name = "aiohttp", specifier = ">=3.12.0" },
-    { name = "betterlogging", specifier = ">=1.0.0" },
-    { name = "environs", specifier = ">=15.0.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
+    { name = "pydantic-settings", specifier = ">=2.14.0" },
     { name = "python-dateutil", specifier = ">=2.9.0" },
 ]
 

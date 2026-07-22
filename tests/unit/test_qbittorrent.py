@@ -202,3 +202,24 @@ async def test_priority_queueing_disabled(
 
     with pytest.raises(QueueingDisabledError):
         await client.change_priority("increasePrio", "h1")
+
+
+async def test_add_torrent_url_sends_urls_field(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def add(request: web.Request) -> web.Response:
+        form = await request.post()
+        captured.update(form)
+        return web.Response(text="Ok.")
+
+    client = await qbit_env(login_app(torrents__add=add))
+    await client.add_torrent_url(
+        "magnet:?xt=urn:btih:abc", tag="t1", category="c", paused=True
+    )
+
+    assert captured["urls"] == "magnet:?xt=urn:btih:abc"
+    assert captured["tags"] == "t1"
+    assert captured["category"] == "c"
+    assert captured["stopped"] == "true"

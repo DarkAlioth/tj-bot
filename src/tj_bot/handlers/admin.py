@@ -3,13 +3,15 @@ import logging
 import secrets
 from collections.abc import Coroutine
 
-from aiogram import Bot, F, Router
-from aiogram.types import CallbackQuery, Message
+from aiogram import Bot, F, Router, types
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers.user import Dlt
-from tj_bot.services.download_watcher import watch_completion
+from tj_bot.services.download_watcher import watch_download
+from tj_bot.services.formatting import DOWNLOADING_STATES
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
     JackettClient,
@@ -31,6 +33,36 @@ def _spawn_watcher(coro: Coroutine[object, object, None]) -> None:
     task = asyncio.create_task(coro)
     _watchers.add(task)
     task.add_done_callback(_watchers.discard)
+
+
+class Dlc(CallbackData, prefix="dlc"):
+    """Control a running download by its tag (pause / resume / delete)."""
+
+    a: str
+    tag: str
+
+
+def download_keyboard(tag: str, state: str) -> InlineKeyboardMarkup:
+    downloading = state in DOWNLOADING_STATES
+    toggle = (
+        types.InlineKeyboardButton(
+            text="⏸ Пауза", callback_data=Dlc(a="pause", tag=tag).pack()
+        )
+        if downloading
+        else types.InlineKeyboardButton(
+            text="▶️ Старт", callback_data=Dlc(a="resume", tag=tag).pack()
+        )
+    )
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                toggle,
+                types.InlineKeyboardButton(
+                    text="🗑 Удалить", callback_data=Dlc(a="delete", tag=tag).pack()
+                ),
+            ]
+        ]
+    )
 
 
 @admin_router.callback_query(Dlt.filter(F.type == "server"))
@@ -79,18 +111,52 @@ async def send_to_server(
 
     await repo.record_download(query.from_user.id, torrent.title, "server")
     await query.answer("Добавлено в загрузки ⬇️")
-    await message.answer(
-        f"⬇️ Отправлено на сервер: <b>{torrent.title}</b>\n"
-        "Уведомлю, когда загрузка завершится."
+    status = await message.answer(
+        f"⬇️ Отправлено на сервер: <b>{torrent.title}</b>\nОжидаю прогресс…"
     )
     _spawn_watcher(
-        watch_completion(
+        watch_download(
             bot,
             qbit,
-            chat_id=message.chat.id,
+            chat_id=status.chat.id,
+            message_id=status.message_id,
             tag=tag,
             name=torrent.title,
+            keyboard_for_state=lambda state: download_keyboard(tag, state),
             poll_interval_seconds=config.settings.qbit_poll_interval_seconds,
             timeout_seconds=config.settings.qbit_watch_timeout_seconds,
         )
     )
+
+
+@admin_router.callback_query(Dlc.filter())
+async def control_download(
+    query: CallbackQuery,
+    callback_data: Dlc,
+    qbit: QbittorrentClient | None,
+    config: AppConfig,
+) -> None:
+    if not config.is_admin(query.from_user.id):
+        await query.answer("Недостаточно прав", show_alert=True)
+        return
+    if qbit is None:
+        await query.answer()
+        return
+    torrents = await qbit.torrents_by_tag(callback_data.tag)
+    hashes = "|".join(t["hash"] for t in torrents if t.get("hash"))
+    if not hashes:
+        await query.answer("Загрузка не найдена")
+        return
+    try:
+        if callback_data.a == "pause":
+            await qbit.stop_torrents(hashes)
+            await query.answer("Поставлено на паузу")
+        elif callback_data.a == "resume":
+            await qbit.start_torrents(hashes)
+            await query.answer("Возобновлено")
+        elif callback_data.a == "delete":
+            await qbit.delete_torrents(hashes, delete_files=True)
+            await query.answer("Удалено вместе с файлами")
+    except QbittorrentError:
+        logger.exception("qBittorrent control %r failed", callback_data.a)
+        await query.answer("qBittorrent недоступен", show_alert=True)

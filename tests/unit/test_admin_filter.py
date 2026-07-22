@@ -1,10 +1,9 @@
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 from aiogram.types import Message
 
-from tgbot.config import Config
 from tgbot.filters.admin import AdminFilter
 
 
@@ -23,10 +22,10 @@ def make_message(user_id: int) -> Message:
 
 
 async def test_admin_passes() -> None:
-    config = cast(Config, FakeConfig())
+    config: Any = FakeConfig()
     assert await AdminFilter()(make_message(111), config) is True
 
 
 async def test_non_admin_rejected() -> None:
-    config = cast(Config, FakeConfig())
+    config: Any = FakeConfig()
     assert await AdminFilter()(make_message(999), config) is False

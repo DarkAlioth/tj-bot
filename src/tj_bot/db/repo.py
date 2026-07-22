@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tj_bot.db.filters import ResultFilters
 from tj_bot.db.models import (
+    BotUser,
     SearchEvent,
     SearchQuery,
     SearchQueryTorrent,
@@ -293,3 +294,51 @@ class TorrentRepo:
             delete(Torrent).where(Torrent.updated_at < cutoff)
         )
         return deleted_queries + deleted_torrents
+
+    async def touch_user(
+        self, user_id: int, username: str | None, full_name: str | None
+    ) -> BotUser:
+        """Upsert the user's identity on every interaction; return the row."""
+        stmt = (
+            pg_insert(BotUser)
+            .values(user_id=user_id, username=username, full_name=full_name)
+            .on_conflict_do_update(
+                index_elements=[BotUser.user_id],
+                set_={
+                    "username": username,
+                    "full_name": full_name,
+                    "last_seen": func.now(),
+                },
+            )
+            .returning(BotUser)
+        )
+        return (await self.session.execute(stmt)).scalar_one()
+
+    async def get_user(self, user_id: int) -> BotUser | None:
+        return await self.session.get(BotUser, user_id)
+
+    async def is_blocked(self, user_id: int) -> bool:
+        stmt = select(BotUser.blocked).where(BotUser.user_id == user_id)
+        return bool((await self.session.execute(stmt)).scalar_one_or_none())
+
+    async def admin_user_ids(self) -> list[int]:
+        stmt = select(BotUser.user_id).where(BotUser.admin.is_(True))
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def list_recent_users(self, limit: int = 15) -> list[BotUser]:
+        stmt = select(BotUser).order_by(BotUser.last_seen.desc()).limit(limit)
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def set_blocked(self, user_id: int, blocked: bool) -> None:
+        user = await self.session.get(BotUser, user_id)
+        if user is not None:
+            user.blocked = blocked
+            await self.session.flush()
+
+    async def set_admin(self, user_id: int, admin: bool) -> None:
+        user = await self.session.get(BotUser, user_id)
+        if user is not None:
+            user.admin = admin
+            if admin:
+                user.blocked = False
+            await self.session.flush()

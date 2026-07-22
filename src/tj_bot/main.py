@@ -26,7 +26,9 @@ from tj_bot.db.engine import (
 )
 from tj_bot.db.maintenance import cleanup_loop
 from tj_bot.db.migrate import run_migrations
+from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers import routers_list
+from tj_bot.middlewares.access import AccessMiddleware
 from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.middlewares.throttling import ThrottlingMiddleware
@@ -68,12 +70,14 @@ def register_global_middlewares(
     config_middleware = ConfigMiddleware(config)
     throttling_middleware = ThrottlingMiddleware()
     database_middleware = DatabaseMiddleware(session_pool)
-    # throttling sits after config (needs admin ids) and before the database so
-    # rate-limited spam never opens a session; applied to messages and callbacks
+    access_middleware = AccessMiddleware()
+    # config (admin ids) -> throttling (spam never opens a session) -> database
+    # (session + repo) -> access (track user, drop blocked); on both observers
     for observer in (dp.message, dp.callback_query):
         observer.outer_middleware(config_middleware)
         observer.outer_middleware(throttling_middleware)
         observer.outer_middleware(database_middleware)
+        observer.outer_middleware(access_middleware)
 
 
 USER_COMMANDS = [
@@ -84,6 +88,7 @@ ADMIN_ONLY_COMMANDS = [
     BotCommand(command="dl", description="🖥 Консоль qBittorrent"),
     BotCommand(command="stats", description="📊 Статистика"),
     BotCommand(command="indexers", description="🧲 Индексеры Jackett"),
+    BotCommand(command="users", description="👥 Пользователи"),
 ]
 
 
@@ -141,6 +146,8 @@ async def main(settings: Settings) -> None:
         download_max_bytes=settings.download_max_bytes,
     )
     qbit = await setup_qbittorrent(settings)
+    async with session_pool() as session:
+        config.dynamic_admins.update(await TorrentRepo(session).admin_user_ids())
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())

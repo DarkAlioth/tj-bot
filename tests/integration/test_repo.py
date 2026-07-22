@@ -64,7 +64,12 @@ async def session() -> AsyncGenerator[AsyncSession]:
     engine = create_async_engine(make_url(TEST_DATABASE_URL))
     pool = async_sessionmaker(engine, expire_on_commit=False)
     async with pool() as db_session:
-        for table in ("search_query_torrents", "search_queries", "torrents"):
+        for table in (
+            "search_query_torrents",
+            "search_queries",
+            "torrents",
+            "magnet_links",
+        ):
             await db_session.execute(text(f"TRUNCATE {table} CASCADE"))
         await db_session.commit()
         yield db_session
@@ -160,6 +165,29 @@ async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None
     assert await repo.get_torrent_by_hash("old") is None
     assert await repo.get_torrent_by_hash("fresh") is not None
     assert await repo.get_search("qh-old") is None
+
+
+async def test_magnet_save_get_and_ttl_cleanup(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    url = "magnet:?xt=urn:btih:abc&dn=Movie"
+
+    magnet_hash = await repo.save_magnet(url)
+    same_hash = await repo.save_magnet(url)
+    await session.commit()
+
+    assert magnet_hash == same_hash
+    assert await repo.get_magnet_url(magnet_hash) == url
+    assert await repo.get_magnet_url("f" * 32) is None
+
+    await session.execute(
+        text("UPDATE magnet_links SET created_at = now() - interval '10 days'")
+    )
+    await session.commit()
+    pool = async_sessionmaker(session.bind, expire_on_commit=False)
+    deleted = await cleanup_once(pool, datetime.timedelta(days=7))
+
+    assert deleted == 1
+    assert await repo.get_magnet_url(magnet_hash) is None
 
 
 async def test_recent_search_and_history_and_stats(session: AsyncSession) -> None:

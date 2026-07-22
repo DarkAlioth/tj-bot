@@ -12,7 +12,12 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from tj_bot.config import AppConfig
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
-from tj_bot.services.jackett import DownloadTooLargeError, JackettClient, JackettError
+from tj_bot.services.jackett import (
+    DownloadTooLargeError,
+    JackettClient,
+    JackettError,
+    safe_torrent_filename,
+)
 
 # Dlt with type="server" is handled by the admin router
 __all__ = ["Dlt", "Pg2", "result_keyboard", "user_router"]
@@ -357,9 +362,7 @@ async def hash_callback(
     if torrent is None or not isinstance(message, Message):
         await query.answer()
         return
-    filename = (
-        torrent.title.replace("<", "").replace(">", "").replace("/", "|") + ".torrent"
-    )
+    filename = safe_torrent_filename(torrent.title)
     try:
         content = await jackett.download(torrent.download_url)
     except DownloadTooLargeError:

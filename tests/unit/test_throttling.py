@@ -23,7 +23,7 @@ def make_data(admin: bool = False) -> dict[str, Any]:
 
 
 async def test_search_quota_blocks_after_limit() -> None:
-    middleware = ThrottlingMiddleware(min_interval=0, search_limit=3)
+    middleware = ThrottlingMiddleware(min_interval=0, costly_limit=3)
     handler = AsyncMock(return_value="ok")
     data = make_data()
 
@@ -53,10 +53,46 @@ async def test_fast_repeats_are_dropped_silently() -> None:
 
 
 async def test_admin_is_exempt() -> None:
-    middleware = ThrottlingMiddleware(min_interval=100, search_limit=0)
+    middleware = ThrottlingMiddleware(min_interval=100, costly_limit=0)
     handler = AsyncMock(return_value="ok")
     data = make_data(admin=True)
 
     for _ in range(5):
         message = make_message(3, "/s x")
         assert await middleware(handler, cast(TelegramObject, message), data) == "ok"
+
+
+def make_callback(user_id: int, data: str) -> AsyncMock:
+    from aiogram.types import CallbackQuery
+
+    cb = AsyncMock(spec=CallbackQuery)
+    cb.from_user = MagicMock()
+    cb.from_user.id = user_id
+    cb.data = data
+    cb.answer = AsyncMock()
+    return cb
+
+
+async def test_refresh_callback_is_rate_limited() -> None:
+    middleware = ThrottlingMiddleware(min_interval=0, costly_limit=2)
+    handler = AsyncMock(return_value="ok")
+    data = make_data()
+
+    for _ in range(2):
+        cb = make_callback(9, "upd:abc")
+        assert await middleware(handler, cast(TelegramObject, cb), data) == "ok"
+
+    blocked = make_callback(9, "upd:abc")
+    assert await middleware(handler, cast(TelegramObject, blocked), data) is None
+    blocked.answer.assert_awaited_once()
+    assert blocked.answer.await_args.kwargs.get("show_alert") is True
+
+
+async def test_non_costly_callback_not_quota_limited() -> None:
+    middleware = ThrottlingMiddleware(min_interval=0, costly_limit=1)
+    handler = AsyncMock(return_value="ok")
+    data = make_data()
+
+    for _ in range(5):
+        cb = make_callback(9, "pg2:nx:hash:1")
+        assert await middleware(handler, cast(TelegramObject, cb), data) == "ok"

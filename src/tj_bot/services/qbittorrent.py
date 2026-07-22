@@ -126,6 +126,34 @@ class QbittorrentClient:
         if body.strip().lower() != "ok.":
             raise QbittorrentError("qBittorrent rejected the magnet")
 
+    async def categories(self) -> dict[str, Any]:
+        """Configured categories: name -> {"name": ..., "savePath": ...}."""
+        body = await self._request("GET", "/api/v2/torrents/categories")
+        try:
+            parsed = json.loads(body)
+        except ValueError as exc:
+            msg = "qBittorrent returned invalid categories"
+            raise QbittorrentError(msg) from exc
+        if not isinstance(parsed, dict):
+            raise QbittorrentError("Unexpected categories payload")
+        return parsed
+
+    async def free_space(self) -> int:
+        """Free bytes on the default save path disk; -1 when unknown."""
+        body = await self._request("GET", "/api/v2/sync/maindata", params={"rid": "0"})
+        try:
+            parsed = json.loads(body)
+        except ValueError as exc:
+            msg = "qBittorrent returned invalid maindata"
+            raise QbittorrentError(msg) from exc
+        if not isinstance(parsed, dict):
+            raise QbittorrentError("Unexpected maindata payload")
+        server_state = parsed.get("server_state")
+        if not isinstance(server_state, dict):
+            return -1
+        value = server_state.get("free_space_on_disk")
+        return int(value) if isinstance(value, int | float) else -1
+
     async def torrents_by_tag(self, tag: str) -> list[dict[str, Any]]:
         body = await self._request("GET", "/api/v2/torrents/info", params={"tag": tag})
         try:

@@ -81,6 +81,18 @@ class BotUser(Base):
     )
 
 
+class MagnetLink(Base):
+    """Pending magnet awaiting category choice; survives bot restarts."""
+
+    __tablename__ = "magnet_links"
+
+    hash: Mapped[str] = mapped_column(String(32), primary_key=True)
+    url: Mapped[str]
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class DownloadEvent(Base):
     __tablename__ = "download_events"
 

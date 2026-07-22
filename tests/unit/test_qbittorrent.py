@@ -204,6 +204,59 @@ async def test_priority_queueing_disabled(
         await client.change_priority("increasePrio", "h1")
 
 
+async def test_categories_parses_dict(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    async def categories(request: web.Request) -> web.Response:
+        assert request.method == "GET"  # noqa: S101
+        return web.Response(
+            text=json.dumps({"movies": {"name": "movies", "savePath": "/dl"}}),
+            content_type="application/json",
+        )
+
+    client = await qbit_env(login_app(torrents__categories=categories))
+    result = await client.categories()
+
+    assert result["movies"]["savePath"] == "/dl"
+
+
+async def test_categories_rejects_non_dict(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    async def categories(request: web.Request) -> web.Response:
+        return web.Response(text="[]", content_type="application/json")
+
+    client = await qbit_env(login_app(torrents__categories=categories))
+    with pytest.raises(QbittorrentError, match="categories"):
+        await client.categories()
+
+
+async def test_free_space_from_maindata(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    async def maindata(request: web.Request) -> web.Response:
+        assert request.query["rid"] == "0"  # noqa: S101
+        return web.Response(
+            text=json.dumps({"server_state": {"free_space_on_disk": 42_000}}),
+            content_type="application/json",
+        )
+
+    client = await qbit_env(login_app(sync__maindata=maindata))
+
+    assert await client.free_space() == 42_000
+
+
+async def test_free_space_unknown_when_missing(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    async def maindata(request: web.Request) -> web.Response:
+        return web.Response(text=json.dumps({"server_state": {}}))
+
+    client = await qbit_env(login_app(sync__maindata=maindata))
+
+    assert await client.free_space() == -1
+
+
 async def test_add_torrent_url_sends_urls_field(
     qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
 ) -> None:

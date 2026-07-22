@@ -26,6 +26,7 @@ def make_config(qbit_enabled: bool = False, admin: bool = False) -> AppConfig:
     config.qbit_enabled = qbit_enabled
     config.is_admin = lambda _user_id: admin
     config.settings.search_cache_seconds = 3600
+    config.settings.subscriptions_per_user = 3
     return cast(AppConfig, config)
 
 
@@ -150,7 +151,7 @@ async def test_render_page_navigation_buttons() -> None:
 
     keyboard = telegram_message.edit_text.await_args.kwargs["reply_markup"]
     labels = [button.text for row in keyboard.inline_keyboard for button in row]
-    assert labels == ["💾 Скачать", "🗂 Категории", "↕ Сиды", "⬅", "🔄", "➡"]
+    assert labels == ["💾 Скачать", "🗂 Категории", "↕ Сиды", "🔔", "⬅", "🔄", "➡"]
 
     callbacks = [
         button.callback_data
@@ -269,3 +270,72 @@ async def test_history_replay_stale_query_alerts() -> None:
     await replay_history(query, Hst(qid=9), repo, jackett, make_config())
 
     assert query.answer.await_args.kwargs.get("show_alert") is True
+
+
+async def test_subscribe_prefills_seen_and_confirms() -> None:
+    from tj_bot.handlers.user import Sub, subscribe
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.chat = MagicMock()
+    telegram_message.chat.id = 777
+    query.message = telegram_message
+    query.from_user = MagicMock()
+    query.from_user.id = 42
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(
+        id=5, hash="qh", query_text="ubuntu", result_count=2
+    )
+    repo.count_subscriptions.return_value = 0
+    created = MagicMock()
+    created.id = 10
+    repo.create_subscription.return_value = created
+    repo.get_result_hashes.return_value = ["h1", "h2"]
+
+    await subscribe(query, Sub(a="add", i=0, qh="qh"), repo, make_config())
+
+    repo.create_subscription.assert_awaited_once_with(42, 777, "ubuntu")
+    repo.add_seen_hashes.assert_awaited_once_with(10, ["h1", "h2"])
+    assert "Подписка создана" in query.answer.await_args.args[0]
+
+
+async def test_subscribe_limit_blocks() -> None:
+    from tj_bot.handlers.user import Sub, subscribe
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.chat = MagicMock()
+    query.message = telegram_message
+    query.from_user = MagicMock()
+    query.from_user.id = 42
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(
+        id=5, hash="qh", query_text="ubuntu", result_count=2
+    )
+    config = make_config()
+    config.settings.subscriptions_per_user = 3
+    repo.count_subscriptions.return_value = 3
+
+    await subscribe(query, Sub(a="add", i=0, qh="qh"), repo, config)
+
+    repo.create_subscription.assert_not_awaited()
+    assert query.answer.await_args.kwargs.get("show_alert") is True
+
+
+async def test_unsubscribe_rerenders_list() -> None:
+    from tj_bot.handlers.user import Sub, unsubscribe
+
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    query.from_user = MagicMock()
+    query.from_user.id = 42
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.delete_subscription.return_value = True
+    repo.list_subscriptions.return_value = []
+
+    await unsubscribe(query, Sub(a="del", i=7, qh=""), repo)
+
+    repo.delete_subscription.assert_awaited_once_with(7, 42)
+    assert "Подписок нет" in telegram_message.edit_text.await_args.args[0]

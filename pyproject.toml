@@ -7,11 +7,20 @@ requires-python = ">=3.13"
 dependencies = [
     "aiogram>=3.30.0",
     "aiohttp>=3.12.0",
-    "environs>=15.0.1",
+    "pydantic-settings>=2.14.0",
     "python-dateutil>=2.9.0",
-    "betterlogging>=1.0.0",
     "psycopg2-binary>=2.9.10",
 ]
+
+[project.scripts]
+tj-bot = "tj_bot.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tj_bot"]
 
 [dependency-groups]
 dev = [
@@ -25,9 +34,6 @@ dev = [
     "types-python-dateutil>=2.9.0",
 ]
 
-[tool.uv]
-package = false
-
 [tool.ruff]
 line-length = 88
 target-version = "py313"
@@ -37,38 +43,36 @@ select = ["E", "F", "I", "N", "S", "UP", "ANN", "B", "C4", "PTH"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-# Legacy modules pending refactoring (removed module-by-module in follow-up PRs)
-"bot.py" = ["ANN", "S", "E501", "UP", "B", "F401"]
-"tgbot/**" = ["ANN", "S", "E501", "E722", "UP", "B", "F401", "E741", "N", "C4", "PTH"]
+# Legacy module pending refactoring (rewritten in the database/jackett/handlers PRs)
+"src/tj_bot/handlers/user.py" = ["ANN", "S", "E501", "E722", "UP", "B", "F401", "N", "C4", "PTH"]
 "tests/**" = ["S101"]
 
 [tool.mypy]
 strict = true
 python_version = "3.13"
-files = ["bot.py", "tgbot", "tests"]
+files = ["src", "tests"]
 
-# Legacy modules pending refactoring (removed module-by-module in follow-up PRs)
+# Legacy module pending refactoring (rewritten in the database/jackett/handlers PRs)
 [[tool.mypy.overrides]]
-module = ["bot", "tgbot.*"]
+module = ["tj_bot.handlers.user"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["betterlogging.*", "environs.*", "psycopg2.*"]
+module = ["psycopg2.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = "--cov --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
-source = ["tgbot"]
-# Legacy modules pending refactoring join coverage as they are rewritten
+source_pkgs = ["tj_bot"]
+# Legacy module joins coverage when rewritten; main.py is polling wiring
+# verified by the deploy smoke check
 omit = [
-    "tgbot/handlers/*",
-    "tgbot/middlewares/database.py",
-    "tgbot/config.py",
+    "*/handlers/user.py",
+    "*/main.py",
 ]
 
 [tool.bandit]

@@ -34,6 +34,7 @@ from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
 from tj_bot.services.jackett import JackettClient
+from tj_bot.services.monitor import monitor_loop
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
 logger = logging.getLogger(__name__)
@@ -160,22 +161,32 @@ async def main(settings: Settings) -> None:
     register_global_middlewares(dp, config, session_pool)
     await set_bot_commands(bot, config)
 
-    cleanup_task = asyncio.create_task(
-        cleanup_loop(
-            session_pool,
-            ttl=datetime.timedelta(days=settings.cache_ttl_days),
-            interval_seconds=settings.cleanup_interval_seconds,
+    background_tasks = [
+        asyncio.create_task(
+            cleanup_loop(
+                session_pool,
+                ttl=datetime.timedelta(days=settings.cache_ttl_days),
+                interval_seconds=settings.cleanup_interval_seconds,
+            )
+        ),
+        asyncio.create_task(heartbeat_loop()),
+    ]
+    if settings.alert_check_interval_seconds > 0:
+        background_tasks.append(
+            asyncio.create_task(
+                monitor_loop(
+                    bot, jackett, qbit, config, settings.alert_check_interval_seconds
+                )
+            )
         )
-    )
-    heartbeat_task = asyncio.create_task(heartbeat_loop())
     try:
         await broadcaster.broadcast(bot, config.admin_ids, "Бот был запущен")
         logger.info("Starting polling")
         await dp.start_polling(bot)
     finally:
-        for task in (cleanup_task, heartbeat_task):
+        for task in background_tasks:
             task.cancel()
-        await asyncio.gather(cleanup_task, heartbeat_task, return_exceptions=True)
+        await asyncio.gather(*background_tasks, return_exceptions=True)
         await jackett.close()
         if qbit is not None:
             await qbit.close()

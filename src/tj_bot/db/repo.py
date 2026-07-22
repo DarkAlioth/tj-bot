@@ -1,12 +1,12 @@
 import datetime
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, ClassVar, cast
 
 from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tj_bot.db.models import SearchQuery, SearchQueryTorrent, Torrent
+from tj_bot.db.models import SearchEvent, SearchQuery, SearchQueryTorrent, Torrent
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,7 @@ class TorrentData:
     uploader: str | None
     description: str | None
     category: str
+    tracker: str
     details_url: str
     download_url: str
     seeders: int
@@ -43,6 +44,7 @@ class TorrentRepo:
                     "uploader": item.uploader,
                     "description": item.description,
                     "category": item.category,
+                    "tracker": item.tracker,
                     "details_url": item.details_url,
                     "download_url": item.download_url,
                     "seeders": item.seeders,
@@ -66,20 +68,31 @@ class TorrentRepo:
         id_by_hash = {row.hash: row.id for row in result}
         return [id_by_hash[item.hash] for item in items]
 
-    async def create_search(self, query_hash: str, torrent_ids: list[int]) -> None:
+    async def create_search(
+        self, query_hash: str, torrent_ids: list[int], query_text: str | None = None
+    ) -> int:
+        """Create the search record; returns its id (existing or new)."""
         insert_query = (
             pg_insert(SearchQuery)
-            .values(hash=query_hash, result_count=len(torrent_ids))
+            .values(
+                hash=query_hash,
+                result_count=len(torrent_ids),
+                query_text=query_text,
+            )
             .on_conflict_do_nothing(index_elements=[SearchQuery.hash])
             .returning(SearchQuery.id)
         )
         query_id = (await self.session.execute(insert_query)).scalar()
-        if query_id is None or not torrent_ids:
-            return
-        links = pg_insert(SearchQueryTorrent).values(
-            [{"query_id": query_id, "torrent_id": tid} for tid in torrent_ids]
-        )
-        await self.session.execute(links.on_conflict_do_nothing())
+        if query_id is None:
+            existing = await self.get_search(query_hash)
+            assert existing is not None  # noqa: S101  # conflict implies presence
+            return existing.id
+        if torrent_ids:
+            links = pg_insert(SearchQueryTorrent).values(
+                [{"query_id": query_id, "torrent_id": tid} for tid in torrent_ids]
+            )
+            await self.session.execute(links.on_conflict_do_nothing())
+        return query_id
 
     async def get_search(self, query_hash: str) -> SearchQuery | None:
         stmt = select(SearchQuery).where(SearchQuery.hash == query_hash)
@@ -105,18 +118,111 @@ class TorrentRepo:
         )
         return (await self.session.execute(stmt)).scalar_one()
 
+    SORT_ORDERS: ClassVar[dict[str, tuple[ColumnElement[Any], ...]]] = {
+        "se": (Torrent.seeders.desc(), Torrent.peers.desc(), Torrent.id.desc()),
+        "sz": (Torrent.size.desc(), Torrent.id.desc()),
+        "dt": (Torrent.published_at.desc(), Torrent.id.desc()),
+    }
+
     async def get_result_page(
-        self, query_hash: str, category: str | None, offset: int
+        self, query_hash: str, category: str | None, offset: int, order: str = "se"
     ) -> Torrent | None:
         stmt = (
             select(Torrent)
             .select_from(Torrent, SearchQueryTorrent, SearchQuery)
             .where(*self._results_filter(query_hash, category))
-            .order_by(Torrent.seeders.desc(), Torrent.peers.desc(), Torrent.id.desc())
+            .order_by(*self.SORT_ORDERS.get(order, self.SORT_ORDERS["se"]))
             .limit(1)
             .offset(offset)
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def find_recent_search(
+        self, query_text: str, max_age: datetime.timedelta
+    ) -> SearchQuery | None:
+        cutoff = datetime.datetime.now(datetime.UTC) - max_age
+        stmt = (
+            select(SearchQuery)
+            .where(
+                SearchQuery.query_text == query_text,
+                SearchQuery.created_at >= cutoff,
+            )
+            .order_by(SearchQuery.created_at.desc())
+            .limit(1)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def record_search_event(self, user_id: int, query_id: int) -> None:
+        self.session.add(SearchEvent(user_id=user_id, query_id=query_id))
+        await self.session.flush()
+
+    async def get_user_history(
+        self, user_id: int, limit: int = 10
+    ) -> list[tuple[int, str]]:
+        """Recent unique (query_id, query_text) pairs for the user, newest first."""
+        stmt = (
+            select(SearchQuery.id, SearchQuery.query_text, SearchEvent.created_at)
+            .join(SearchEvent, SearchEvent.query_id == SearchQuery.id)
+            .where(SearchEvent.user_id == user_id, SearchQuery.query_text.is_not(None))
+            .order_by(SearchEvent.created_at.desc())
+            .limit(50)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        seen: set[str] = set()
+        history: list[tuple[int, str]] = []
+        for query_id, query_text, _ in rows:
+            if query_text in seen:
+                continue
+            seen.add(query_text)
+            history.append((query_id, query_text))
+            if len(history) >= limit:
+                break
+        return history
+
+    async def get_query_text(self, query_id: int) -> str | None:
+        stmt = select(SearchQuery.query_text).where(SearchQuery.id == query_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def get_stats(self, window: datetime.timedelta) -> dict[str, object]:
+        cutoff = datetime.datetime.now(datetime.UTC) - window
+        torrents = (
+            await self.session.execute(select(func.count(Torrent.id)))
+        ).scalar_one()
+        queries = (
+            await self.session.execute(select(func.count(SearchQuery.id)))
+        ).scalar_one()
+        events = (
+            await self.session.execute(
+                select(func.count(SearchEvent.id)).where(
+                    SearchEvent.created_at >= cutoff
+                )
+            )
+        ).scalar_one()
+        users = (
+            await self.session.execute(
+                select(func.count(func.distinct(SearchEvent.user_id))).where(
+                    SearchEvent.created_at >= cutoff
+                )
+            )
+        ).scalar_one()
+        top_stmt = (
+            select(SearchQuery.query_text, func.count(SearchEvent.id).label("cnt"))
+            .join(SearchEvent, SearchEvent.query_id == SearchQuery.id)
+            .where(
+                SearchEvent.created_at >= cutoff, SearchQuery.query_text.is_not(None)
+            )
+            .group_by(SearchQuery.query_text)
+            .order_by(func.count(SearchEvent.id).desc())
+            .limit(5)
+        )
+        top = [(row[0], row[1]) for row in (await self.session.execute(top_stmt)).all()]
+        return {
+            "torrents": torrents,
+            "queries": queries,
+            "events_window": events,
+            "users_window": users,
+            "top_queries": top,
+        }
 
     async def get_categories(self, query_hash: str) -> list[tuple[str, int]]:
         stmt = (

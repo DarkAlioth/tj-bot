@@ -53,6 +53,7 @@ def parse_result(torrent: dict[str, Any]) -> TorrentData | None:
         uploader=uploader,
         description=description,
         category=torrent.get("CategoryDesc") or "None",
+        tracker=tracker_id,
         details_url=torrent.get("Details") or "None",
         download_url=torrent["Link"],
         seeders=torrent.get("Seeders") or 0,
@@ -124,6 +125,23 @@ class JackettClient:
             len(parsed),
         )
         return parsed
+
+    async def indexers(self) -> list[dict[str, Any]]:
+        """Configured Jackett indexers with their status."""
+        url = f"{self._base_url}/api/v2.0/indexers"
+        params = {"apikey": self._api_key, "configured": "true"}
+        try:
+            async with self._get_session().get(url, params=params) as resp:
+                if resp.status != 200:
+                    msg = f"Jackett indexers returned HTTP {resp.status}"
+                    raise JackettError(msg)
+                payload = await resp.json()
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            msg = f"Jackett indexers failed: {exc!r}"
+            raise JackettError(msg) from exc
+        if not isinstance(payload, list):
+            raise JackettError("Unexpected indexers payload")
+        return payload
 
     async def download(self, url: str) -> bytes:
         """Fetch a .torrent file enforcing the size cap."""

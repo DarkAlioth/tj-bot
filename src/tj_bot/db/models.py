@@ -17,6 +17,7 @@ class Torrent(Base):
     uploader: Mapped[str | None]
     description: Mapped[str | None]
     category: Mapped[str] = mapped_column(index=True)
+    tracker: Mapped[str] = mapped_column(String(128), server_default="", index=True)
     details_url: Mapped[str]
     download_url: Mapped[str]
     seeders: Mapped[int]
@@ -33,6 +34,7 @@ class SearchQuery(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    query_text: Mapped[str | None] = mapped_column(String(256), index=True)
     result_count: Mapped[int]
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -47,4 +49,17 @@ class SearchQueryTorrent(Base):
     )
     torrent_id: Mapped[int] = mapped_column(
         ForeignKey("torrents.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class SearchEvent(Base):
+    __tablename__ = "search_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    query_id: Mapped[int] = mapped_column(
+        ForeignKey("search_queries.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

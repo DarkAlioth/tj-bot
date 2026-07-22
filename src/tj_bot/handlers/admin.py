@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import secrets
+from collections.abc import Coroutine
 
 from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery, Message
@@ -20,6 +21,16 @@ from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 logger = logging.getLogger(__name__)
 
 admin_router = Router()
+
+# Keep strong references to running watchers so the event loop does not GC them
+# mid-flight (asyncio holds only weak references to tasks).
+_watchers: set[asyncio.Task[None]] = set()
+
+
+def _spawn_watcher(coro: Coroutine[object, object, None]) -> None:
+    task = asyncio.create_task(coro)
+    _watchers.add(task)
+    task.add_done_callback(_watchers.discard)
 
 
 @admin_router.callback_query(Dlt.filter(F.type == "server"))
@@ -71,7 +82,7 @@ async def send_to_server(
         f"⬇️ Отправлено на сервер: <b>{torrent.title}</b>\n"
         "Уведомлю, когда загрузка завершится."
     )
-    asyncio.create_task(  # noqa: RUF006  # fire-and-forget watcher, transient by design
+    _spawn_watcher(
         watch_completion(
             bot,
             qbit,

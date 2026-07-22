@@ -17,6 +17,15 @@ from tj_bot.db.models import (
 
 
 @dataclass(frozen=True)
+class SearchStats:
+    torrents: int
+    queries: int
+    events_window: int
+    users_window: int
+    top_queries: list[tuple[str, int]]
+
+
+@dataclass(frozen=True)
 class TorrentData:
     hash: str
     title: str
@@ -190,7 +199,7 @@ class TorrentRepo:
         stmt = select(SearchQuery.query_text).where(SearchQuery.id == query_id)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
-    async def get_stats(self, window: datetime.timedelta) -> dict[str, object]:
+    async def get_stats(self, window: datetime.timedelta) -> SearchStats:
         cutoff = datetime.datetime.now(datetime.UTC) - window
         torrents = (
             await self.session.execute(select(func.count(Torrent.id)))
@@ -223,13 +232,13 @@ class TorrentRepo:
             .limit(5)
         )
         top = [(row[0], row[1]) for row in (await self.session.execute(top_stmt)).all()]
-        return {
-            "torrents": torrents,
-            "queries": queries,
-            "events_window": events,
-            "users_window": users,
-            "top_queries": top,
-        }
+        return SearchStats(
+            torrents=torrents,
+            queries=queries,
+            events_window=events,
+            users_window=users,
+            top_queries=top,
+        )
 
     async def get_categories(self, query_hash: str) -> list[tuple[str, int]]:
         stmt = (

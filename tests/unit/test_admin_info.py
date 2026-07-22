@@ -18,13 +18,15 @@ def make_message() -> AsyncMock:
 async def test_stats_renders_summary_and_top() -> None:
     message = make_message()
     repo = AsyncMock(spec=TorrentRepo)
-    repo.get_stats.return_value = {
-        "torrents": 42,
-        "queries": 7,
-        "events_window": 19,
-        "users_window": 3,
-        "top_queries": [("ubuntu", 5), ("debian", 2)],
-    }
+    from tj_bot.db.repo import SearchStats
+
+    repo.get_stats.return_value = SearchStats(
+        torrents=42,
+        queries=7,
+        events_window=19,
+        users_window=3,
+        top_queries=[("ubuntu", 5), ("debian", 2)],
+    )
     started = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=3)
 
     await show_stats(cast(Message, message), repo, started)

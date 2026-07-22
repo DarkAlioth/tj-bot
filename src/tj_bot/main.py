@@ -1,6 +1,9 @@
 import asyncio
 import datetime
 import logging
+import os
+import time
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -31,6 +34,22 @@ from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 from tj_bot.services.subscriptions import subscriptions_loop
 
 logger = logging.getLogger(__name__)
+
+# Ephemeral liveness marker inside the container, inspected by HEALTHCHECK.
+HEARTBEAT_PATH = Path(  # noqa: S108  # nosec B108
+    os.environ.get("HEARTBEAT_PATH", "/tmp/tj-bot-heartbeat")  # noqa: S108  # nosec B108
+)
+HEARTBEAT_INTERVAL_SECONDS = 30
+
+
+async def heartbeat_loop() -> None:
+    """Touch the liveness file the container HEALTHCHECK inspects."""
+    while True:
+        try:
+            HEARTBEAT_PATH.write_text(str(time.time()), encoding="utf-8")
+        except OSError:
+            logger.exception("Failed to write heartbeat")
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
 def setup_logging() -> None:
@@ -116,6 +135,7 @@ async def main(settings: Settings) -> None:
             bot, session_pool, jackett, settings.subscriptions_check_seconds
         )
     )
+    heartbeat_task = asyncio.create_task(heartbeat_loop())
     try:
         await broadcaster.broadcast(bot, config.admin_ids, "Бот был запущен")
         logger.info("Starting polling")
@@ -123,6 +143,7 @@ async def main(settings: Settings) -> None:
     finally:
         cleanup_task.cancel()
         subscriptions_task.cancel()
+        heartbeat_task.cancel()
         await jackett.close()
         if qbit is not None:
             await qbit.close()

@@ -28,4 +28,7 @@ COPY --from=builder /app/.venv /app/.venv
 
 USER bot
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["python", "-c", "import pathlib,sys,time; p = pathlib.Path('/tmp/tj-bot-heartbeat'); sys.exit(0 if p.exists() and time.time() - float(p.read_text()) < 90 else 1)"]
+
 CMD ["tj-bot"]

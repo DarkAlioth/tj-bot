@@ -216,3 +216,24 @@ async def test_sort_orders(session: AsyncSession) -> None:
     assert top_seeders is not None and top_seeders.hash == "s"
     assert top_size is not None and top_size.hash == "b"
     assert top_date is not None and top_date.hash == "s"
+
+
+async def test_upsert_deduplicates_batch_with_repeated_hash(
+    session: AsyncSession,
+) -> None:
+    # the same release returned by two indexers → identical hash in one batch.
+    # a naive ON CONFLICT DO UPDATE raises CardinalityViolationError; the repo
+    # must collapse the duplicate instead of crashing the whole search.
+    repo = TorrentRepo(session)
+    dup = make_torrent("same", seeders=10)
+    dup_again = make_torrent("same", seeders=20)
+    other = make_torrent("other", seeders=5)
+
+    ids = await repo.upsert_torrents([dup, dup_again, other])
+
+    # ids returned for every input position; duplicates share one id
+    assert len(ids) == 3
+    assert ids[0] == ids[1]
+    assert len(set(ids)) == 2
+    stored = await repo.get_torrent_by_hash("same")
+    assert stored is not None

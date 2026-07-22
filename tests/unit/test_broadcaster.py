@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 from aiogram.methods import SendMessage
 
-from tgbot.services.broadcaster import broadcast, send_message
+from tj_bot.services.broadcaster import broadcast, send_message
 
 
 def make_bot(side_effect: object = None) -> AsyncMock:

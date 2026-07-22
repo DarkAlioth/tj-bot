@@ -14,26 +14,23 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dateutil import parser
 
-from tgbot.config import (
-    DB_HOST,
-    DB_PORT,
-    POSTGRES_DB,
-    POSTGRES_PASSWORD,
-    POSTGRES_USER,
-    Config,
-)
+from tj_bot.config import AppConfig, load_settings
 
 user_router = Router()
 
+# Transitional: module-level sync connection is replaced by the async
+# database layer in the follow-up PR.
+_settings = load_settings()
+
 try:
     conn = psycopg2.connect(
-        database=POSTGRES_DB,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT,
+        database=_settings.postgres_db,
+        user=_settings.postgres_user,
+        password=_settings.postgres_password,
+        host=_settings.db_host,
+        port=_settings.db_port,
     )
-except:
+except psycopg2.OperationalError:
     print("I am unable to connect to the database")
     exit()
 
@@ -125,7 +122,7 @@ async def admin_start(message: Message):
 
 @user_router.message(F.text, Command("s"))
 async def srch_torrent(
-    message: Message, config: Config, command, pages=0, sql_hashs=""
+    message: Message, config: AppConfig, command, pages=0, sql_hashs=""
 ):
     if command.args is None:
         text = ["⠀\nДля поиска используйте:", "<code>/s Название</code>\n⠀"]
@@ -133,9 +130,9 @@ async def srch_torrent(
     else:
         srch_message = await message.answer("Поиск выполняется, ожидайте...")
         url = (
-            config.jackett.jackett_url
+            config.jackett.url
             + "/api/v2.0/indexers/all/results?apikey="
-            + config.jackett.jackett_key
+            + config.jackett.api_key
             + '&Query="'
             + command.args
             + '"'

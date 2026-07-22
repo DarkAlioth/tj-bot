@@ -20,6 +20,7 @@ from tj_bot.handlers import routers_list
 from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.services import broadcaster
+from tj_bot.services.jackett import JackettClient
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,16 @@ async def main(settings: Settings) -> None:
 
     engine = create_engine(settings)
     session_pool = create_session_pool(engine)
+    jackett = JackettClient(
+        base_url=settings.jackett_url,
+        api_key=jackett_api_key,
+        timeout_seconds=settings.jackett_timeout_seconds,
+        download_max_bytes=settings.download_max_bytes,
+    )
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
+    dp["jackett"] = jackett
     dp.include_routers(*routers_list)
     register_global_middlewares(
         dp, [ConfigMiddleware(config), DatabaseMiddleware(session_pool)]
@@ -69,6 +77,7 @@ async def main(settings: Settings) -> None:
         await dp.start_polling(bot)
     finally:
         cleanup_task.cancel()
+        await jackett.close()
         await engine.dispose()
 
 

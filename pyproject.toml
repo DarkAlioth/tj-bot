@@ -45,19 +45,12 @@ select = ["E", "F", "I", "N", "S", "UP", "ANN", "B", "C4", "PTH"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-# Legacy module pending refactoring (rewritten in the database/jackett/handlers PRs)
-"src/tj_bot/handlers/user.py" = ["ANN", "S", "E501", "E722", "UP", "B", "F401", "N", "C4", "PTH"]
 "tests/**" = ["S101", "S105", "S106"]  # asserts and fake credentials are fine in tests
 
 [tool.mypy]
 strict = true
 python_version = "3.13"
 files = ["src", "tests"]
-
-# Legacy module pending refactoring (rewritten in the database/jackett/handlers PRs)
-[[tool.mypy.overrides]]
-module = ["tj_bot.handlers.user"]
-ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -66,11 +59,9 @@ addopts = "--cov --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 source_pkgs = ["tj_bot"]
-# handlers/user.py is covered via the handlers refactoring PR; main.py is
-# polling wiring verified by the deploy smoke check; migrations run in CI
-# via the integration fixture
+# main.py is polling wiring verified by the deploy smoke check; migrations
+# run in CI via the integration fixture
 omit = [
-    "*/handlers/user.py",
     "*/main.py",
     "*/db/migrations/*",
 ]

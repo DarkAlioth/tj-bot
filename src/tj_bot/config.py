@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     jackett_url: str = "http://jackett:9117"
     jackett_config_path: Path = Path("/config/ServerConfig.json")
+    jackett_timeout_seconds: float = 90
+    download_max_bytes: int = 10 * 1024 * 1024
 
     cache_ttl_days: int = 7
     cleanup_interval_seconds: int = 3600

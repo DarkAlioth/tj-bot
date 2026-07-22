@@ -47,7 +47,7 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 # Legacy module pending refactoring (rewritten in the database/jackett/handlers PRs)
 "src/tj_bot/handlers/user.py" = ["ANN", "S", "E501", "E722", "UP", "B", "F401", "N", "C4", "PTH"]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S105", "S106"]  # asserts and fake credentials are fine in tests
 
 [tool.mypy]
 strict = true

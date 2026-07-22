@@ -46,7 +46,9 @@ async def heartbeat_loop() -> None:
     """Touch the liveness file the container HEALTHCHECK inspects."""
     while True:
         try:
-            HEARTBEAT_PATH.write_text(str(time.time()), encoding="utf-8")
+            await asyncio.to_thread(
+                HEARTBEAT_PATH.write_text, str(time.time()), encoding="utf-8"
+            )
         except OSError:
             logger.exception("Failed to write heartbeat")
         await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
@@ -141,9 +143,11 @@ async def main(settings: Settings) -> None:
         logger.info("Starting polling")
         await dp.start_polling(bot)
     finally:
-        cleanup_task.cancel()
-        subscriptions_task.cancel()
-        heartbeat_task.cancel()
+        for task in (cleanup_task, subscriptions_task, heartbeat_task):
+            task.cancel()
+        await asyncio.gather(
+            cleanup_task, subscriptions_task, heartbeat_task, return_exceptions=True
+        )
         await jackett.close()
         if qbit is not None:
             await qbit.close()

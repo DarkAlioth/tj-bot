@@ -7,6 +7,8 @@ from aiogram.types import InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
+MAX_FLOOD_RETRIES = 3
+
 
 async def send_message(
     bot: Bot,
@@ -16,31 +18,38 @@ async def send_message(
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> bool:
     """Send a message swallowing delivery errors; return delivery success."""
-    try:
-        await bot.send_message(
-            user_id,
-            text,
-            disable_notification=disable_notification,
-            reply_markup=reply_markup,
-        )
-    except exceptions.TelegramBadRequest:
-        logger.error("Target [ID:%s]: chat not found", user_id)
-    except exceptions.TelegramForbiddenError:
-        logger.error("Target [ID:%s]: bot is blocked by the user", user_id)
-    except exceptions.TelegramRetryAfter as e:
-        logger.error(
-            "Target [ID:%s]: flood limit exceeded, retrying in %s seconds",
-            user_id,
-            e.retry_after,
-        )
-        await asyncio.sleep(e.retry_after)
-        return await send_message(
-            bot, user_id, text, disable_notification, reply_markup
-        )
-    except exceptions.TelegramAPIError:
-        logger.exception("Target [ID:%s]: failed to deliver", user_id)
-    else:
-        return True
+    # bounded retry loop (not recursion) so a pathological RetryAfter sequence
+    # cannot grow the stack
+    for _ in range(MAX_FLOOD_RETRIES + 1):
+        try:
+            await bot.send_message(
+                user_id,
+                text,
+                disable_notification=disable_notification,
+                reply_markup=reply_markup,
+            )
+        except exceptions.TelegramBadRequest:
+            logger.error("Target [ID:%s]: chat not found", user_id)
+            return False
+        except exceptions.TelegramForbiddenError:
+            logger.error("Target [ID:%s]: bot is blocked by the user", user_id)
+            return False
+        except exceptions.TelegramRetryAfter as e:
+            logger.error(
+                "Target [ID:%s]: flood limit exceeded, retrying in %s seconds",
+                user_id,
+                e.retry_after,
+            )
+            await asyncio.sleep(e.retry_after)
+            continue
+        except exceptions.TelegramAPIError:
+            logger.exception("Target [ID:%s]: failed to deliver", user_id)
+            return False
+        else:
+            return True
+    logger.error(
+        "Target [ID:%s]: giving up after %s retries", user_id, MAX_FLOOD_RETRIES
+    )
     return False
 
 

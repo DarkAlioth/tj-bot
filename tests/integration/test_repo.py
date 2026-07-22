@@ -183,10 +183,10 @@ async def test_recent_search_and_history_and_stats(session: AsyncSession) -> Non
     assert await repo.get_query_text(query_id) == "ubuntu iso"
 
     stats = await repo.get_stats(datetime.timedelta(days=7))
-    assert stats["torrents"] == 2
-    assert stats["events_window"] == 2
-    assert stats["users_window"] == 1
-    assert stats["top_queries"] == [("ubuntu iso", 2)]
+    assert stats.torrents == 2
+    assert stats.events_window == 2
+    assert stats.users_window == 1
+    assert stats.top_queries == [("ubuntu iso", 2)]
 
 
 async def test_sort_orders(session: AsyncSession) -> None:

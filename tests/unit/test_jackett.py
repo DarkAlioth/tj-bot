@@ -133,3 +133,11 @@ async def test_download_above_cap_rejected(
 
 def app_url(client: JackettClient) -> str:
     return client._base_url + "/"  # noqa: SLF001  # test reaches into the client
+
+
+def test_parse_result_uploader_fallback_without_prefix() -> None:
+    # no "Uploader:" prefix — the <br> fallback branch extracts the token
+    result = {**RESULT, "Description": "SomeUser <br>rest of description"}
+    data = parse_result(result)
+    assert data is not None
+    assert data.uploader == "SomeUser"

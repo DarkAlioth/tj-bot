@@ -39,17 +39,16 @@ async def show_stats(
     lines = [
         "📊 <b>Статистика</b>",
         f"Аптайм: {format_uptime(started_at)}",
-        f"Торрентов в кэше: {stats['torrents']}",
-        f"Поисковых выдач: {stats['queries']}",
-        f"Поисков за {STATS_WINDOW_DAYS}д: {stats['events_window']}"
-        f" • Пользователей: {stats['users_window']}",
+        f"Торрентов в кэше: {stats.torrents}",
+        f"Поисковых выдач: {stats.queries}",
+        f"Поисков за {STATS_WINDOW_DAYS}д: {stats.events_window}"
+        f" • Пользователей: {stats.users_window}",
     ]
-    top = stats["top_queries"]
-    if isinstance(top, list) and top:
+    if stats.top_queries:
         lines.append(f"\n🔥 <b>Топ запросов за {STATS_WINDOW_DAYS}д:</b>")
         lines.extend(
-            f"{i}. {html.escape(str(text))} — {count}"
-            for i, (text, count) in enumerate(top, start=1)
+            f"{i}. {html.escape(text)} — {count}"
+            for i, (text, count) in enumerate(stats.top_queries, start=1)
         )
     await message.answer("\n".join(lines), parse_mode=ParseMode.HTML)
 

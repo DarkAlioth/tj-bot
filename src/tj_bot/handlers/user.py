@@ -7,7 +7,6 @@ from aiogram.filters import CommandObject
 from aiogram.filters.callback_data import CallbackData
 from aiogram.filters.command import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
@@ -87,9 +86,9 @@ def result_keyboard(
         ),
         types.InlineKeyboardButton(
             text="🗂 Категории",
-            callback_data=Pgn(
-                type="go_search", qh=qh, page=0, srch=ALL_CATEGORIES
-            ).pack(),
+            # carries the current position so the menu's back button can
+            # return to exactly this card
+            callback_data=Pgn(type="go_search", qh=qh, page=page, srch=srch).pack(),
         ),
     ]
     nav = []
@@ -266,22 +265,50 @@ async def go_search(
     if not categories:
         await query.answer()
         return
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text=f"Все - {search.result_count}",
-        callback_data=Pgn(
-            type="go_priv", qh=callback_data.qh, page=1, srch=ALL_CATEGORIES
-        ).pack(),
-    )
+    rows = [
+        [
+            types.InlineKeyboardButton(
+                text=f"Все - {search.result_count}",
+                callback_data=Pgn(
+                    type="go_priv", qh=callback_data.qh, page=1, srch=ALL_CATEGORIES
+                ).pack(),
+            )
+        ]
+    ]
+    row: list[types.InlineKeyboardButton] = []
     for category, count in categories:
-        builder.button(
-            text=f"{category} - {count}",
-            callback_data=Pgn(
-                type="fs", qh=callback_data.qh, page=0, srch=category_token(category)
-            ).pack(),
+        row.append(
+            types.InlineKeyboardButton(
+                text=f"{category} - {count}",
+                callback_data=Pgn(
+                    type="fs",
+                    qh=callback_data.qh,
+                    page=0,
+                    srch=category_token(category),
+                ).pack(),
+            )
         )
-    builder.adjust(1, 2)
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=builder.export())
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="◀️ Назад",
+                # the menu callback kept the position of the card it was
+                # opened from — return straight to it
+                callback_data=Pgn(
+                    type="fs",
+                    qh=callback_data.qh,
+                    page=callback_data.page,
+                    srch=callback_data.srch,
+                ).pack(),
+            )
+        ]
+    )
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=rows)
     await query.answer()
     await message.edit_text(
         "⠀\n⠀<b>Выберите категорию</b>:\n⠀",

@@ -1,0 +1,42 @@
+services:
+  bot:
+    build: .
+    container_name: torrent_search_bot
+    volumes:
+      - ./:/app
+      - ./Jackett/Jackett:/config
+    working_dir: /app
+    command: python bot.py
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - jackett
+    networks:
+      - app_network
+
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    ports:
+      - "9117:9117"
+    volumes:
+      - ./Jackett:/config
+    networks:
+      - app_network
+
+  db:
+    image: postgres:16
+    container_name: db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge

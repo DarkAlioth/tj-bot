@@ -237,3 +237,51 @@ async def test_upsert_deduplicates_batch_with_repeated_hash(
     assert len(set(ids)) == 2
     stored = await repo.get_torrent_by_hash("same")
     assert stored is not None
+
+
+async def test_result_filters_apply(session: AsyncSession) -> None:
+    from tj_bot.db.filters import GB, ResultFilters
+
+    repo = TorrentRepo(session)
+    big = TorrentData(
+        hash="big",
+        title="Big",
+        uploader=None,
+        description=None,
+        category="Movies",
+        tracker="t",
+        details_url="d",
+        download_url="l",
+        seeders=100,
+        peers=1,
+        published_at=datetime.date.today(),
+        size=10 * GB,
+    )
+    small_old = TorrentData(
+        hash="small",
+        title="Small",
+        uploader=None,
+        description=None,
+        category="Movies",
+        tracker="t",
+        details_url="d",
+        download_url="l",
+        seeders=2,
+        peers=0,
+        published_at=datetime.date(2020, 1, 1),
+        size=500_000_000,
+    )
+    ids = await repo.upsert_torrents([big, small_old])
+    await repo.create_search("qhf", ids)
+
+    # no filter -> both
+    assert await repo.count_results("qhf", None, ResultFilters()) == 2
+    # seeders >= 50 -> only big
+    only_big = ResultFilters(seeders=3)
+    assert await repo.count_results("qhf", None, only_big) == 1
+    top = await repo.get_result_page("qhf", None, 0, "se", only_big)
+    assert top is not None and top.hash == "big"
+    # size 1-5GB -> neither (big is 10GB, small is 0.5GB)
+    assert await repo.count_results("qhf", None, ResultFilters(size=2)) == 0
+    # date within a year -> only big (small is 2020)
+    assert await repo.count_results("qhf", None, ResultFilters(date=3)) == 1

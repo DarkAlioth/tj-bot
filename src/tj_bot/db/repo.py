@@ -45,6 +45,13 @@ class TorrentRepo:
         """
         if not items:
             return []
+        # A batch ON CONFLICT DO UPDATE cannot touch the same row twice, so
+        # collapse duplicate hashes within the batch — Jackett returns the same
+        # release from multiple indexers, and the hash (title+tracker+date) then
+        # repeats. Keep the first occurrence.
+        deduped: dict[str, TorrentData] = {}
+        for item in items:
+            deduped.setdefault(item.hash, item)
         stmt = pg_insert(Torrent).values(
             [
                 {
@@ -61,7 +68,7 @@ class TorrentRepo:
                     "published_at": item.published_at,
                     "size": item.size,
                 }
-                for item in items
+                for item in deduped.values()
             ]
         )
         stmt = stmt.on_conflict_do_update(

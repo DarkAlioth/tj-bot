@@ -7,12 +7,14 @@ from tj_bot.handlers.qbit_console import (
     Qbm,
     build_card_view,
     build_list_view,
+    matches_filter,
+    qbit_actions,
+)
+from tj_bot.services.formatting import (
     format_eta,
     format_size,
     format_speed,
-    matches_filter,
     progress_bar,
-    qbit_actions,
 )
 from tj_bot.services.qbittorrent import QbittorrentClient
 

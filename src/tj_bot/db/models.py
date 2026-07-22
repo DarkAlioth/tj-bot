@@ -63,27 +63,3 @@ class SearchEvent(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
-
-class Subscription(Base):
-    __tablename__ = "subscriptions"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
-    chat_id: Mapped[int] = mapped_column(BigInteger)
-    query_text: Mapped[str] = mapped_column(String(256))
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    last_checked_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-
-
-class SubscriptionSeen(Base):
-    __tablename__ = "subscription_seen"
-
-    subscription_id: Mapped[int] = mapped_column(
-        ForeignKey("subscriptions.id", ondelete="CASCADE"), primary_key=True
-    )
-    torrent_hash: Mapped[str] = mapped_column(String(64), primary_key=True)

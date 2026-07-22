@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     cache_ttl_days: int = 7
     cleanup_interval_seconds: int = 3600
     search_cache_seconds: int = 3600
-    subscriptions_per_user: int = 3
-    subscriptions_check_seconds: int = 6 * 3600
 
     # Send-to-server via qBittorrent (admin only). Disabled unless all three set.
     qbit_url: str | None = None

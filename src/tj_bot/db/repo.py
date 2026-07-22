@@ -6,7 +6,13 @@ from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tj_bot.db.models import SearchEvent, SearchQuery, SearchQueryTorrent, Torrent
+from tj_bot.db.filters import ResultFilters
+from tj_bot.db.models import (
+    SearchEvent,
+    SearchQuery,
+    SearchQueryTorrent,
+    Torrent,
+)
 
 
 @dataclass(frozen=True)
@@ -115,7 +121,10 @@ class TorrentRepo:
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     def _results_filter(
-        self, query_hash: str, category: str | None
+        self,
+        query_hash: str,
+        category: str | None,
+        filters: ResultFilters | None = None,
     ) -> list[ColumnElement[bool]]:
         conditions: list[ColumnElement[bool]] = [
             SearchQueryTorrent.torrent_id == Torrent.id,
@@ -124,29 +133,43 @@ class TorrentRepo:
         ]
         if category is not None:
             conditions.append(Torrent.category == category)
+        if filters is not None:
+            conditions.extend(filters.conditions())
         return conditions
 
-    async def count_results(self, query_hash: str, category: str | None) -> int:
+    async def count_results(
+        self,
+        query_hash: str,
+        category: str | None,
+        filters: ResultFilters | None = None,
+    ) -> int:
         stmt = (
             select(func.count(Torrent.id))
             .select_from(Torrent, SearchQueryTorrent, SearchQuery)
-            .where(*self._results_filter(query_hash, category))
+            .where(*self._results_filter(query_hash, category, filters))
         )
         return (await self.session.execute(stmt)).scalar_one()
 
     SORT_ORDERS: ClassVar[dict[str, tuple[ColumnElement[Any], ...]]] = {
         "se": (Torrent.seeders.desc(), Torrent.peers.desc(), Torrent.id.desc()),
         "sz": (Torrent.size.desc(), Torrent.id.desc()),
+        "za": (Torrent.size.asc(), Torrent.id.desc()),
         "dt": (Torrent.published_at.desc(), Torrent.id.desc()),
+        "da": (Torrent.published_at.asc(), Torrent.id.desc()),
     }
 
     async def get_result_page(
-        self, query_hash: str, category: str | None, offset: int, order: str = "se"
+        self,
+        query_hash: str,
+        category: str | None,
+        offset: int,
+        order: str = "se",
+        filters: ResultFilters | None = None,
     ) -> Torrent | None:
         stmt = (
             select(Torrent)
             .select_from(Torrent, SearchQueryTorrent, SearchQuery)
-            .where(*self._results_filter(query_hash, category))
+            .where(*self._results_filter(query_hash, category, filters))
             .order_by(*self.SORT_ORDERS.get(order, self.SORT_ORDERS["se"]))
             .limit(1)
             .offset(offset)

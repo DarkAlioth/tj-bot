@@ -26,7 +26,7 @@ def test_trusted_urls_allowed(url: str) -> None:
 @pytest.mark.parametrize(
     "url",
     [
-        "http://10.0.0.5:8181/api/v2/torrents/info",  # qBittorrent in LAN
+        "http://10.0.0.5:8181/api/v2/torrents/info",  # a LAN service
         "http://db:5432/",  # internal service
         "http://169.254.169.254/latest/meta-data/",  # cloud metadata
         "http://jackett:9118/dl",  # wrong port

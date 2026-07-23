@@ -64,7 +64,7 @@ jobs:
     steps:
       - name: Deploy to production
         run: |
-          cd /path/to/tj-bot
+          cd "${{ secrets.DEPLOY_PATH }}"
           git fetch origin main
           git reset --hard origin/main
           docker compose up -d --build

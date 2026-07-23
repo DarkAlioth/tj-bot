@@ -2,7 +2,7 @@ import datetime
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
-from aiogram.types import InlineQuery
+from aiogram.types import InlineQuery, InputTextMessageContent
 
 from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
@@ -83,8 +83,7 @@ def test_article_unescapes_plain_fields_and_keeps_html_content() -> None:
     assert article.title == "Movie & Co 1080p"
     assert "🌱 120" in (article.description or "")
     content = article.input_message_content
-    assert content is not None
-    text = cast(str, content.message_text)  # type: ignore[attr-defined]  # InputTextMessageContent
-    assert "Movie &amp; Co 1080p" in text
-    assert "https://tracker.example/details" in text
-    assert "01.07.2026" in text
+    assert isinstance(content, InputTextMessageContent)
+    assert "Movie &amp; Co 1080p" in content.message_text
+    assert "https://tracker.example/details" in content.message_text
+    assert "01.07.2026" in content.message_text

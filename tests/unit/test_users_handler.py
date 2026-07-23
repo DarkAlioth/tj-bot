@@ -89,10 +89,19 @@ async def test_promote_updates_db_and_live_set() -> None:
     repo.get_user.return_value = make_user(admin=True)
     config = make_config(set())
 
-    await toggle_admin(query, Usr(a="promote", uid=100), repo, config)
+    bot = AsyncMock()
+    await toggle_admin(query, Usr(a="promote", uid=100), repo, config, bot)
 
     repo.set_admin.assert_awaited_once_with(100, True)
     assert 100 in config.dynamic_admins
+    # the promoted user's command menu is refreshed at once
+    from aiogram.types import BotCommandScopeChat
+
+    from tj_bot.commands import ADMIN_ONLY_COMMANDS, USER_COMMANDS
+
+    bot.set_my_commands.assert_awaited_once_with(
+        USER_COMMANDS + ADMIN_ONLY_COMMANDS, scope=BotCommandScopeChat(chat_id=100)
+    )
 
 
 async def test_demote_removes_from_live_set() -> None:
@@ -102,10 +111,18 @@ async def test_demote_removes_from_live_set() -> None:
     config = make_config(set())
     config.dynamic_admins.add(100)
 
-    await toggle_admin(query, Usr(a="demote", uid=100), repo, config)
+    bot = AsyncMock()
+    await toggle_admin(query, Usr(a="demote", uid=100), repo, config, bot)
 
     repo.set_admin.assert_awaited_once_with(100, False)
     assert 100 not in config.dynamic_admins
+    from aiogram.types import BotCommandScopeChat
+
+    from tj_bot.commands import USER_COMMANDS
+
+    bot.set_my_commands.assert_awaited_once_with(
+        USER_COMMANDS, scope=BotCommandScopeChat(chat_id=100)
+    )
 
 
 async def test_activity_view_lists_searches_and_downloads() -> None:
@@ -126,3 +143,13 @@ async def test_activity_view_lists_searches_and_downloads() -> None:
     assert "поисков: 3" in text and "скачиваний: 2" in text
     assert "ubuntu" in text
     assert "Movie" in text and "на сервер" in text
+
+
+def test_user_label_flags_super_admin_with_crown() -> None:
+    from tj_bot.handlers.users import user_label
+
+    config = make_config({100})
+    assert user_label(make_user(uid=100, admin=True), config).startswith("👑")
+    assert user_label(make_user(uid=101, admin=True), config).startswith("⭐")
+    assert user_label(make_user(uid=102), config).startswith("👤")
+    assert user_label(make_user(uid=103, blocked=True), config).startswith("🚫")

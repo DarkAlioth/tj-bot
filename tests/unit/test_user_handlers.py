@@ -251,7 +251,7 @@ async def test_list_view_renders_numbered_page() -> None:
     assert first.t == "fs"
     assert first.p == 10
     nav = keyboard.inline_keyboard[-1]
-    assert [b.text for b in nav] == ["⬅", "➡"]
+    assert [b.text for b in nav] == ["⬅", "🔄", "➡"]
     assert all(
         len(b.callback_data.encode()) <= 64
         for row in keyboard.inline_keyboard

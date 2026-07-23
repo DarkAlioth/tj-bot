@@ -33,6 +33,7 @@ from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
+from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import JackettClient
 from tj_bot.services.monitor import monitor_loop
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
@@ -183,7 +184,7 @@ async def main(settings: Settings) -> None:
             )
         )
     try:
-        await broadcaster.broadcast(bot, config.admin_ids, "Бот был запущен")
+        await broadcaster.broadcast(bot, config.admin_ids, padded("Бот был запущен"))
         logger.info("Starting polling")
         await dp.start_polling(bot)
     finally:

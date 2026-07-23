@@ -2,6 +2,8 @@ from aiogram import F, Router
 from aiogram.types import Message
 from aiogram.utils.markdown import hcode
 
+from tj_bot.services.formatting import padded
+
 echo_router = Router()
 
 
@@ -9,8 +11,8 @@ echo_router = Router()
 async def echo_hint(message: Message) -> None:
     query = message.text or ""
     text = [
-        f"⠀\n⠀Вы написали: {hcode(query)}\n",
+        f"Вы написали: {hcode(query)}\n",
         "Для поиска используйте:",
-        f"{hcode(f'/s {query}')}\n⠀",
+        hcode(f"/s {query}"),
     ]
-    await message.answer("\n".join(text))
+    await message.answer(padded("\n".join(text)))

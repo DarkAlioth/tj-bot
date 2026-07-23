@@ -4,11 +4,13 @@ from aiogram import Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import ErrorEvent, Message
 
+from tj_bot.services.formatting import padded
+
 logger = logging.getLogger(__name__)
 
 errors_router = Router()
 
-USER_FACING_ERROR = "Что-то пошло не так, попробуйте ещё раз позже 🛠"
+USER_FACING_ERROR = padded("Что-то пошло не так, попробуйте ещё раз позже 🛠")
 
 
 @errors_router.errors()

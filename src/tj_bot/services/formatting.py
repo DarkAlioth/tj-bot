@@ -1,5 +1,15 @@
 from typing import Any
 
+
+def padded(text: str) -> str:
+    """Frame a message with the invisible-braille margins used bot-wide.
+
+    Top/bottom lines and a leading pad on the first text line, matching the
+    hand-formatted torrent card. Not for callback alerts or broadcast payloads.
+    """
+    return f"⠀\n⠀{text}\n⠀"
+
+
 STATE_VIEW = {
     "downloading": ("⬇️", "Загружается"),
     "stalledDL": ("🐌", "Ожидает сидов"),

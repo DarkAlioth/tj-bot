@@ -15,7 +15,12 @@ from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
 from tj_bot.services import broadcaster
-from tj_bot.services.formatting import DOWNLOADING_STATES, format_size, format_speed
+from tj_bot.services.formatting import (
+    DOWNLOADING_STATES,
+    format_size,
+    format_speed,
+    padded,
+)
 from tj_bot.services.jackett import JackettClient, JackettError
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
@@ -58,7 +63,7 @@ async def show_stats(
             f"{i}. {html.escape(text)} — {count}"
             for i, (text, count) in enumerate(stats.top_queries, start=1)
         )
-    await message.answer("\n".join(lines), parse_mode=ParseMode.HTML)
+    await message.answer(padded("\n".join(lines)), parse_mode=ParseMode.HTML)
 
 
 async def qbit_summary(qbit: QbittorrentClient | None) -> str:
@@ -109,7 +114,8 @@ async def show_health(
         await qbit_summary(qbit),
     ]
     status = await message.answer(
-        "\n".join([*lines, "🧲 Индексеры: проверяю…"]), parse_mode=ParseMode.HTML
+        padded("\n".join([*lines, "🧲 Индексеры: проверяю…"])),
+        parse_mode=ParseMode.HTML,
     )
     try:
         indexers = await jackett.indexers()
@@ -121,7 +127,7 @@ async def show_health(
             indexer_summary(indexers) if indexers else ["🧲 Индексеры: не настроены"]
         )
     await status.edit_text(
-        "\n".join([*lines, *indexer_lines]), parse_mode=ParseMode.HTML
+        padded("\n".join([*lines, *indexer_lines])), parse_mode=ParseMode.HTML
     )
 
 
@@ -136,7 +142,7 @@ async def broadcast_draft(message: Message, command: CommandObject) -> None:
     """Show the exact message users will get, with confirm/cancel buttons."""
     if not command.args:
         await message.answer(
-            "Использование: <code>/broadcast текст рассылки</code>",
+            padded("Использование: <code>/broadcast текст рассылки</code>"),
             parse_mode=ParseMode.HTML,
         )
         return
@@ -183,22 +189,22 @@ async def broadcast_confirm(
     await query.answer("Отправляю…")
     delivered = await broadcaster.broadcast(bot, user_ids, text)
     await message.edit_text(
-        f"📢 Доставлено {delivered} из {len(user_ids)}:\n\n{text}",
+        padded(f"📢 Доставлено {delivered} из {len(user_ids)}:\n\n{text}"),
         parse_mode=ParseMode.HTML,
     )
 
 
 @admin_info_router.message(Command("indexers"))
 async def show_indexers(message: Message, jackett: JackettClient) -> None:
-    status = await message.answer("🧲 Проверяю индексеры…")
+    status = await message.answer(padded("🧲 Проверяю индексеры…"))
     try:
         indexers = await jackett.indexers()
     except JackettError:
         logger.exception("Failed to fetch indexers")
-        await status.edit_text("Jackett недоступен 🛠")
+        await status.edit_text(padded("Jackett недоступен 🛠"))
         return
     if not indexers:
-        await status.edit_text("Индексеры не настроены — откройте Jackett UI.")
+        await status.edit_text(padded("Индексеры не настроены — откройте Jackett UI."))
         return
     healthy = sum(1 for i in indexers if not i.get("Error"))
     lines = [f"🧲 <b>Индексеры Jackett</b> — {healthy}/{len(indexers)} в строю\n"]
@@ -209,4 +215,4 @@ async def show_indexers(message: Message, jackett: JackettClient) -> None:
             lines.append(f"⚠️ {name} — <i>{html.escape(str(error))[:120]}</i>")
         else:
             lines.append(f"✅ {name} · {indexer.get('Results', 0)}")
-    await status.edit_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    await status.edit_text(padded("\n".join(lines)), parse_mode=ParseMode.HTML)

@@ -16,7 +16,7 @@ from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
 from tj_bot.handlers.user import Dlt, category_token
 from tj_bot.services.download_watcher import watch_download
-from tj_bot.services.formatting import DOWNLOADING_STATES, format_size
+from tj_bot.services.formatting import DOWNLOADING_STATES, format_size, padded
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
     JackettClient,
@@ -148,7 +148,7 @@ async def send_category_menu(
         lines.append("\n⚠️ <b>Места на диске может не хватить!</b>")
     lines.append("\nВыберите категорию:")
     await message.answer(
-        "\n".join(lines),
+        padded("\n".join(lines)),
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -164,7 +164,7 @@ async def _start_progress(
     """Turn ``status`` into the live progress message and start the watcher."""
     try:
         await status.edit_text(
-            f"⬇️ Отправлено на сервер: <b>{name}</b>\nОжидаю прогресс…"
+            padded(f"⬇️ Отправлено на сервер: <b>{name}</b>\nОжидаю прогресс…")
         )
     except TelegramAPIError:
         # torrent is already added; progress edits are best-effort like the watcher
@@ -385,7 +385,7 @@ async def add_magnet(
     config: AppConfig,
 ) -> None:
     if qbit is None:
-        await message.answer("qBittorrent не настроен.")
+        await message.answer(padded("qBittorrent не настроен."))
         return
     url = (message.text or "").strip()
     magnet_hash = await repo.save_magnet(url)
@@ -401,4 +401,4 @@ async def add_magnet(
         )
     except QbittorrentError:
         logger.exception("Failed to load qBittorrent categories")
-        await message.answer("qBittorrent недоступен 🛠")
+        await message.answer(padded("qBittorrent недоступен 🛠"))

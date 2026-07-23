@@ -6,7 +6,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardMarkup
 
-from tj_bot.services.formatting import torrent_progress_text
+from tj_bot.services.formatting import padded, torrent_progress_text
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ async def _edit(
 ) -> None:
     try:
         await bot.edit_message_text(
-            text,
+            padded(text),
             chat_id=chat_id,
             message_id=message_id,
             parse_mode="HTML",

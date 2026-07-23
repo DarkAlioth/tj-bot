@@ -12,6 +12,7 @@ from tj_bot.config import AppConfig
 from tj_bot.db.models import BotUser
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
+from tj_bot.services.formatting import padded
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ async def build_user_list(repo: TorrentRepo) -> tuple[str, types.InlineKeyboardM
 @users_router.message(Command("users"))
 async def list_users(message: Message, repo: TorrentRepo) -> None:
     text, keyboard = await build_user_list(repo)
-    await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await message.answer(padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
 
 @users_router.callback_query(Usr.filter(F.a == "list"))
@@ -112,7 +113,9 @@ async def back_to_list(query: CallbackQuery, repo: TorrentRepo) -> None:
         return
     text, keyboard = await build_user_list(repo)
     await query.answer()
-    await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await message.edit_text(
+        padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard
+    )
 
 
 @users_router.callback_query(Usr.filter(F.a == "card"))
@@ -126,7 +129,9 @@ async def show_user(
         return
     text, keyboard = build_user_card(user, config)
     await query.answer()
-    await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await message.edit_text(
+        padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard
+    )
 
 
 @users_router.callback_query(Usr.filter(F.a.in_({"block", "unblock"})))
@@ -143,7 +148,9 @@ async def toggle_block(
     user = await repo.get_user(callback_data.uid)
     if user is not None and isinstance(message, Message):
         text, keyboard = build_user_card(user, config)
-        await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        await message.edit_text(
+            padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard
+        )
 
 
 @users_router.callback_query(Usr.filter(F.a.in_({"promote", "demote"})))
@@ -165,7 +172,9 @@ async def toggle_admin(
     user = await repo.get_user(callback_data.uid)
     if user is not None and isinstance(message, Message):
         text, keyboard = build_user_card(user, config)
-        await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        await message.edit_text(
+            padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard
+        )
 
 
 KIND_LABELS = {"chat": "📥 в чат", "server": "🖥 на сервер"}
@@ -206,5 +215,5 @@ async def show_activity(
     )
     await query.answer()
     await message.edit_text(
-        "\n".join(lines), parse_mode=ParseMode.HTML, reply_markup=keyboard
+        padded("\n".join(lines)), parse_mode=ParseMode.HTML, reply_markup=keyboard
     )

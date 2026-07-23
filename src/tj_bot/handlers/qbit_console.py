@@ -10,10 +10,11 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, Message
 
 from tj_bot.filters.admin import AdminOnly
-from tj_bot.services.formatting import (
+from tj_bot.services.formatting import (  # noqa: I001
     format_eta,
     format_size,
     format_speed,
+    padded,
     progress_bar,
     state_view,
 )
@@ -215,6 +216,7 @@ async def render_list(
     transfer = await qbit.transfer_info()
     alt_on = await qbit.alt_speed_enabled()
     text, keyboard, _ = build_list_view(torrents, transfer, alt_on, page, fkey)
+    text = padded(text)
     if edit:
         await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     else:
@@ -228,20 +230,22 @@ async def render_card(
     if torrent is None:
         return False
     text, keyboard = build_card_view(torrent, page, fkey)
-    await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await message.edit_text(
+        padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard
+    )
     return True
 
 
 @qbit_router.message(Command("dl"))
 async def qbit_menu(message: Message, qbit: QbittorrentClient | None) -> None:
     if qbit is None:
-        await message.answer("qBittorrent не настроен (см. QBIT_* в .env).")
+        await message.answer(padded("qBittorrent не настроен (см. QBIT_* в .env)."))
         return
     try:
         await render_list(message, qbit, 0, "all", edit=False)
     except QbittorrentError:
         logger.exception("Failed to render qBittorrent list")
-        await message.answer(UNAVAILABLE_TEXT)
+        await message.answer(padded(UNAVAILABLE_TEXT))
 
 
 @qbit_router.callback_query(Qbm.filter())
@@ -323,7 +327,7 @@ async def qbit_actions(
             )
             await query.answer()
             await message.edit_text(
-                f"Удалить <b>{name}</b>?",
+                padded(f"Удалить <b>{name}</b>?"),
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
             )

@@ -5,7 +5,7 @@ from aiogram import Bot
 
 from tj_bot.config import AppConfig
 from tj_bot.services import broadcaster
-from tj_bot.services.formatting import format_size
+from tj_bot.services.formatting import format_size, padded
 from tj_bot.services.jackett import JackettClient, JackettError
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
@@ -77,7 +77,7 @@ async def check_once(
     recovered = [recovery_text(key) for key in known if key not in problems]
     if new or recovered:
         await broadcaster.broadcast(
-            bot, config.admin_ids, build_alert_text(new, recovered)
+            bot, config.admin_ids, padded(build_alert_text(new, recovered))
         )
     return problems
 

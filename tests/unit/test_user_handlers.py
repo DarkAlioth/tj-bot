@@ -173,6 +173,44 @@ async def test_render_page_navigation_buttons() -> None:
     assert all(len(data.encode()) <= 64 for data in callbacks)
 
 
+async def test_last_replays_most_recent_query_from_cache() -> None:
+    from tj_bot.handlers.user import repeat_last_search
+
+    message = AsyncMock()
+    message.from_user = MagicMock()
+    message.from_user.id = 111
+    sent = AsyncMock()
+    message.answer.return_value = sent
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_user_history.return_value = [(5, "ubuntu iso")]
+    recent = SearchQuery(id=5, hash="qh", result_count=2)
+    repo.find_recent_search.return_value = recent
+    repo.get_result_page.return_value = make_torrent_model()
+    jackett = AsyncMock(spec=JackettClient)
+
+    await repeat_last_search(cast(Message, message), repo, jackett, make_config())
+
+    repo.get_user_history.assert_awaited_once_with(111, limit=1)
+    jackett.search.assert_not_awaited()  # served from cache
+    assert "из <b>2</b>" in sent.edit_text.await_args.args[0]
+
+
+async def test_last_with_empty_history_hints() -> None:
+    from tj_bot.handlers.user import repeat_last_search
+
+    message = AsyncMock()
+    message.from_user = MagicMock()
+    message.from_user.id = 111
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_user_history.return_value = []
+
+    await repeat_last_search(
+        cast(Message, message), repo, AsyncMock(spec=JackettClient), make_config()
+    )
+
+    assert "пуста" in message.answer.await_args.args[0]
+
+
 async def test_list_view_renders_numbered_page() -> None:
     query = AsyncMock()
     telegram_message = AsyncMock(spec=Message)

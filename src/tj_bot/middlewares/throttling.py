@@ -48,7 +48,8 @@ class ThrottlingMiddleware(BaseMiddleware):
     def _is_costly(event: Message | CallbackQuery) -> bool:
         if isinstance(event, Message):
             text = event.text or ""
-            return text == "/s" or text.startswith("/s ")
+            # /last replays a search and hits trackers when the cache expired
+            return text in ("/s", "/last") or text.startswith("/s ")
         return (event.data or "").startswith(COSTLY_CALLBACK_PREFIXES)
 
     async def _notify(

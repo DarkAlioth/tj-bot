@@ -333,6 +333,24 @@ async def refresh_search(
     )
 
 
+@user_router.message(Command("last"))
+async def repeat_last_search(
+    message: Message,
+    repo: TorrentRepo,
+    jackett: JackettClient,
+    config: AppConfig,
+) -> None:
+    user_id = message.from_user.id if message.from_user else None
+    if user_id is None:
+        return
+    history = await repo.get_user_history(user_id, limit=1)
+    if not history:
+        await message.answer("История поиска пуста. Начните с /s")
+        return
+    srch_message = await message.answer(SEARCHING_TEXT)
+    await run_search(srch_message, user_id, history[0][1], repo, jackett, config)
+
+
 @user_router.message(Command("history"))
 async def show_history(message: Message, repo: TorrentRepo) -> None:
     user_id = message.from_user.id if message.from_user else None

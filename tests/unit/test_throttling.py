@@ -39,6 +39,20 @@ async def test_search_quota_blocks_after_limit() -> None:
     blocked.answer.assert_awaited_once()
 
 
+async def test_last_command_counts_as_costly() -> None:
+    middleware = ThrottlingMiddleware(min_interval=0, costly_limit=1)
+    handler = AsyncMock(return_value="ok")
+    data = make_data()
+
+    first = make_message(1, "/last")
+    assert await middleware(handler, cast(TelegramObject, first), data) == "ok"
+    blocked = make_message(1, "/last")
+    result = await middleware(handler, cast(TelegramObject, blocked), data)
+
+    assert result is None
+    assert handler.await_count == 1
+
+
 async def test_fast_repeats_are_dropped_silently() -> None:
     middleware = ThrottlingMiddleware(min_interval=100)
     handler = AsyncMock(return_value="ok")

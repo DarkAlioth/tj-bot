@@ -13,6 +13,7 @@ from tj_bot.db.models import Favorite
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers.admin import KIND_FAVORITE, send_category_menu
 from tj_bot.handlers.user import FAV_SAVE_LABEL, FAV_SAVED_LABEL, Dlt
+from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
     JackettClient,
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 favorites_router = Router()
 
 FAV_PAGE_SIZE = 10
-EMPTY_TEXT = "⭐ Избранное пусто — нажмите ⭐ на карточке поиска."
+EMPTY_TEXT = padded("⭐ Избранное пусто — нажмите «☆ Сохранить» на карточке поиска.")
 GONE_TEXT = "Записи больше нет в избранном"
 
 
@@ -136,7 +137,7 @@ async def render_favorites(
     keyboard = types.InlineKeyboardMarkup(
         inline_keyboard=[*number_rows, nav] if nav else number_rows
     )
-    text = "\n".join(lines)
+    text = padded("\n".join(lines))
     if edit:
         await target.edit_text(
             text,
@@ -225,7 +226,7 @@ async def open_favorite(
     )
     await query.answer()
     await message.edit_text(
-        "\n".join(lines),
+        padded("\n".join(lines)),
         parse_mode=ParseMode.HTML,
         reply_markup=keyboard,
         disable_web_page_preview=True,
@@ -244,11 +245,11 @@ async def download_favorite(
     try:
         content = await jackett.download(favorite.download_url)
     except DownloadTooLargeError:
-        await message.answer("Файл с трекера слишком большой.")
+        await message.answer(padded("Файл с трекера слишком большой."))
     except JackettError:
         logger.exception("Favorite download failed for %s", favorite.id)
         await message.answer(
-            "Не удалось скачать — ссылка могла устареть, найдите заново."
+            padded("Не удалось скачать — ссылка могла устареть, найдите заново.")
         )
     else:
         await message.answer_document(

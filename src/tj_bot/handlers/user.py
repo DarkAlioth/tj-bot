@@ -19,6 +19,7 @@ from tj_bot.db.filters import (
 )
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
     JackettClient,
@@ -44,10 +45,10 @@ user_router = Router()
 
 ALL_CATEGORIES = "ALL"
 DEFAULT_SORT = "se"
-NOT_FOUND_TEXT = "К сожалению ничего не найдено 😔"
-SEARCH_UNAVAILABLE_TEXT = "Поиск временно недоступен, попробуйте позже 🛠"
-SEARCHING_TEXT = "Поиск выполняется, ожидайте..."
-STALE_QUERY_TEXT = "Запрос устарел, выполните новый поиск: /s"
+NOT_FOUND_TEXT = padded("К сожалению ничего не найдено 😔")
+SEARCH_UNAVAILABLE_TEXT = padded("Поиск временно недоступен, попробуйте позже 🛠")
+SEARCHING_TEXT = padded("Поиск выполняется, ожидайте...")
+STALE_QUERY_TEXT = "Запрос устарел, выполните новый поиск: /s"  # alert popup
 
 DEFAULT_FILTER = "000"
 LIST_PAGE_SIZE = 10
@@ -225,12 +226,12 @@ def result_keyboard(
 @user_router.message(CommandStart())
 async def user_start(message: Message) -> None:
     text = [
-        "⠀\n⠀Приветсвую!\n",
+        "Приветсвую!\n",
         "Для поиска введите:",
         "<code>/s Название</code>\n",
-        "История ваших запросов: /history\n⠀",
+        "История ваших запросов: /history",
     ]
-    await message.answer("\n".join(text), parse_mode=ParseMode.HTML)
+    await message.answer(padded("\n".join(text)), parse_mode=ParseMode.HTML)
 
 
 async def render_result_card(
@@ -320,8 +321,8 @@ async def srch_torrent(
     command: CommandObject,
 ) -> None:
     if command.args is None:
-        text = ["⠀\nДля поиска используйте:", "<code>/s Название</code>\n⠀"]
-        await message.answer("\n".join(text), parse_mode=ParseMode.HTML)
+        text = ["Для поиска используйте:", "<code>/s Название</code>"]
+        await message.answer(padded("\n".join(text)), parse_mode=ParseMode.HTML)
         return
     srch_message = await message.answer(SEARCHING_TEXT)
     user_id = message.from_user.id if message.from_user else None
@@ -369,7 +370,7 @@ async def repeat_last_search(
         return
     history = await repo.get_user_history(user_id, limit=1)
     if not history:
-        await message.answer("История поиска пуста. Начните с /s")
+        await message.answer(padded("История поиска пуста. Начните с /s"))
         return
     srch_message = await message.answer(SEARCHING_TEXT)
     await run_search(srch_message, user_id, history[0][1], repo, jackett, config)
@@ -382,7 +383,7 @@ async def show_history(message: Message, repo: TorrentRepo) -> None:
         return
     history = await repo.get_user_history(user_id)
     if not history:
-        await message.answer("История поиска пуста. Начните с /s")
+        await message.answer(padded("История поиска пуста. Начните с /s"))
         return
     rows = [
         [
@@ -394,7 +395,7 @@ async def show_history(message: Message, repo: TorrentRepo) -> None:
         for query_id, text in history
     ]
     await message.answer(
-        "🕘 <b>Недавние запросы</b> — нажмите, чтобы повторить:",
+        padded("🕘 <b>Недавние запросы</b> — нажмите, чтобы повторить:"),
         parse_mode=ParseMode.HTML,
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
     )
@@ -441,10 +442,10 @@ async def hash_callback(
     try:
         content = await jackett.download(torrent.download_url)
     except DownloadTooLargeError:
-        await message.answer("Файл с трекера слишком большой.")
+        await message.answer(padded("Файл с трекера слишком большой."))
     except JackettError:
         logger.exception("Download failed for %s", torrent.hash)
-        await message.answer("Не удалось скачать файл с трекера.")
+        await message.answer(padded("Не удалось скачать файл с трекера."))
     else:
         await message.answer_document(
             BufferedInputFile(file=content, filename=filename)
@@ -600,8 +601,7 @@ async def render_list(
         return Pg2(t=t, qh=qh, p=p, c=cat, s=s, fl=flt).pack()
 
     lines = [
-        f"⠀\n⠀<b>Результаты {offset + 1}–{offset + len(torrents)}</b>"
-        f" из <b>{counter}</b>\n"
+        f"<b>Результаты {offset + 1}–{offset + len(torrents)}</b> из <b>{counter}</b>\n"
     ]
     lines.extend(
         list_line(offset + i + 1, torrent) for i, torrent in enumerate(torrents)
@@ -633,7 +633,7 @@ async def render_list(
     rows = [top_row, *number_rows, nav] if nav else [top_row, *number_rows]
     await query.answer()
     await message.edit_text(
-        "\n".join(lines),
+        padded("\n".join(lines)),
         parse_mode=ParseMode.HTML,
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,
@@ -706,7 +706,7 @@ async def go_search(
     )
     await query.answer()
     await message.edit_text(
-        "⠀\n⠀<b>Выберите категорию</b>:\n⠀",
+        padded("<b>Выберите категорию</b>:"),
         parse_mode=ParseMode.HTML,
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,
@@ -764,7 +764,7 @@ def build_filter_menu(
         parts.append(filters.summary())
     active = ", ".join(parts) if parts else "не заданы"
     # escape: size labels contain "<"/">" which break Telegram HTML parsing
-    text = f"🔎 <b>Фильтры</b>\nАктивно: {html.escape(active)}"
+    text = padded(f"🔎 <b>Фильтры</b>\nАктивно: {html.escape(active)}")
     return text, types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -819,7 +819,7 @@ async def render_category_picker(
     )
     await query.answer()
     await message.edit_text(
-        "⠀\n⠀<b>Категория результатов</b>:\n⠀",
+        padded("<b>Категория результатов</b>:"),
         parse_mode=ParseMode.HTML,
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,

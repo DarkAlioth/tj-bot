@@ -87,6 +87,7 @@ def torrent_progress_text(torrent: dict[str, Any], name: str) -> str:
     return "\n".join(
         [
             f"{emoji} <b>{name}</b>",
+            "⠀",
             progress_bar(torrent.get("progress", 0)),
             f"{state_name} · ETA {format_eta(torrent.get('eta', -1))}",
             f"⬇️ {format_speed(torrent.get('dlspeed', 0))}"

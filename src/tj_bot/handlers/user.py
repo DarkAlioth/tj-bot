@@ -226,7 +226,8 @@ def result_keyboard(
 @user_router.message(CommandStart())
 async def user_start(message: Message) -> None:
     text = [
-        "Приветсвую!\n",
+        "Приветсвую!",
+        "⠀",
         "Для поиска введите:",
         "<code>/s Название</code>\n",
         "История ваших запросов: /history",
@@ -601,7 +602,8 @@ async def render_list(
         return Pg2(t=t, qh=qh, p=p, c=cat, s=s, fl=flt).pack()
 
     lines = [
-        f"<b>Результаты {offset + 1}–{offset + len(torrents)}</b> из <b>{counter}</b>\n"
+        f"<b>Результаты {offset + 1}–{offset + len(torrents)}</b> из <b>{counter}</b>",
+        "⠀",
     ]
     lines.extend(
         list_line(offset + i + 1, torrent) for i, torrent in enumerate(torrents)
@@ -764,7 +766,7 @@ def build_filter_menu(
         parts.append(filters.summary())
     active = ", ".join(parts) if parts else "не заданы"
     # escape: size labels contain "<"/">" which break Telegram HTML parsing
-    text = padded(f"🔎 <b>Фильтры</b>\nАктивно: {html.escape(active)}")
+    text = padded(f"🔎 <b>Фильтры</b>\n⠀\nАктивно: {html.escape(active)}")
     return text, types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -107,7 +107,7 @@ async def render_favorites(
         else:
             await target.answer(EMPTY_TEXT)
         return
-    lines = [f"⭐ <b>Избранное</b> — {total}\n"]
+    lines = [f"⭐ <b>Избранное</b> — {total}", "⠀"]
     lines.extend(
         favorite_line(offset + i + 1, favorite) for i, favorite in enumerate(favorites)
     )
@@ -186,7 +186,8 @@ async def open_favorite(
         return
     size_gb = round(favorite.size / 1024 / 1024 / 1024, 2)
     lines = [
-        "⭐ <b>Избранное</b>\n",
+        "⭐ <b>Избранное</b>",
+        "⠀",
         f'<b>Название</b>: <a href="{favorite.details_url}">{favorite.title}</a>\n',
         f"<b>Размер</b>: <code>{size_gb} GB</code>",
         f"<b>Категория</b>: <code>{favorite.category}</code>",

@@ -49,7 +49,7 @@ def recovery_text(key: str) -> str:
 
 
 def build_alert_text(new: list[str], recovered: list[str]) -> str:
-    lines = ["🚨 <b>Мониторинг</b>"]
+    lines = ["🚨 <b>Мониторинг</b>", "⠀"]
     lines.extend(f"⚠️ {text}" for text in new)
     lines.extend(f"✅ {text}" for text in recovered)
     return "\n".join(lines)

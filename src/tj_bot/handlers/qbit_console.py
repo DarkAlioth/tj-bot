@@ -93,6 +93,7 @@ def build_list_view(
     up_speed = format_speed(transfer.get("up_info_speed", 0))
     text_lines = [
         "🖥 <b>qBittorrent</b>",
+        "⠀",
         f"⬇️ {dl_speed} • ⬆️ {up_speed} • 🐢 {'вкл' if alt_on else 'выкл'}",
         f"Торрентов: {counts['all']} • Загружается: {counts['dl']} "
         f"• Раздаётся: {counts['up']} • Пауза: {counts['stop']}",
@@ -177,6 +178,7 @@ def build_card_view(
     text = "\n".join(
         [
             f"📄 <b>{name}</b>",
+            "⠀",
             "",
             progress_bar(torrent.get("progress", 0)),
             f"Статус: {emoji} {state_name} • ETA: {format_eta(torrent.get('eta', -1))}",

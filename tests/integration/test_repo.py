@@ -71,6 +71,7 @@ async def session() -> AsyncGenerator[AsyncSession]:
             "magnet_links",
             "bot_users",
             "download_events",
+            "favorites",
         ):
             await db_session.execute(text(f"TRUNCATE {table} CASCADE"))
         await db_session.commit()
@@ -196,6 +197,40 @@ async def test_active_user_ids_excludes_blocked(session: AsyncSession) -> None:
 
     assert 9001 in ids
     assert 9002 not in ids
+
+
+async def test_favorites_lifecycle_and_ttl_immunity(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.upsert_torrents([make_torrent("f1")])
+    torrent = await repo.get_torrent_by_hash("f1")
+    assert torrent is not None
+
+    assert await repo.add_favorite(111, torrent) is True
+    assert await repo.add_favorite(111, torrent) is False  # unique per user
+    assert await repo.add_favorite(222, torrent) is True
+    await session.commit()
+
+    assert await repo.count_favorites(111) == 1
+    mine = await repo.list_favorites(111, limit=10)
+    assert mine[0].title == torrent.title
+    # authz: user id scopes the lookup
+    assert await repo.get_favorite(222, mine[0].id) is None
+    assert await repo.get_favorite(111, mine[0].id) is not None
+
+    # favorites survive the cache TTL cleanup
+    await session.execute(
+        text("UPDATE torrents SET updated_at = now() - interval '10 days'")
+    )
+    await session.commit()
+    pool = async_sessionmaker(session.bind, expire_on_commit=False)
+    await cleanup_once(pool, datetime.timedelta(days=7))
+    assert await repo.get_torrent_by_hash("f1") is None
+    assert await repo.count_favorites(111) == 1
+
+    await repo.remove_favorite_by_hash(111, "f1")
+    assert await repo.count_favorites(111) == 0
+    await repo.remove_favorite(222, (await repo.list_favorites(222, 10))[0].id)
+    assert await repo.count_favorites(222) == 0
 
 
 async def test_db_size_reports_positive_bytes(session: AsyncSession) -> None:

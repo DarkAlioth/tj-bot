@@ -53,6 +53,7 @@ def build_user_card(
         status = "⭐ супер-админ (.env)"
     lines = [
         f"👤 <b>{html.escape(user.full_name or 'без имени')}</b>",
+        "⠀",
         f"@{html.escape(user.username)}" if user.username else "без username",
         f"ID: <code>{user.user_id}</code>",
         f"Статус: {status}",
@@ -94,7 +95,7 @@ async def build_user_list(repo: TorrentRepo) -> tuple[str, types.InlineKeyboardM
         for user in users
     ]
     return (
-        "👥 <b>Пользователи</b> — недавняя активность.\nНажмите для управления:",
+        "👥 <b>Пользователи</b> — недавняя активность.\n⠀\nНажмите для управления:",
         types.InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -192,7 +193,10 @@ async def show_activity(
     searches, downloads = await repo.user_activity_counts(uid)
     recent_searches = await repo.get_user_searches(uid, limit=10)
     recent_downloads = await repo.get_user_downloads(uid, limit=10)
-    lines = [f"📋 <b>Активность</b> — поисков: {searches}, скачиваний: {downloads}\n"]
+    lines = [
+        f"📋 <b>Активность</b> — поисков: {searches}, скачиваний: {downloads}",
+        "⠀",
+    ]
     lines.append("🔎 <b>Последние запросы:</b>")
     if recent_searches:
         lines.extend(

@@ -11,7 +11,8 @@ echo_router = Router()
 async def echo_hint(message: Message) -> None:
     query = message.text or ""
     text = [
-        f"Вы написали: {hcode(query)}\n",
+        f"Вы написали: {hcode(query)}",
+        "⠀",
         "Для поиска используйте:",
         hcode(f"/s {query}"),
     ]

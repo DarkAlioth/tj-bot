@@ -51,6 +51,7 @@ async def show_stats(
     stats = await repo.get_stats(datetime.timedelta(days=STATS_WINDOW_DAYS))
     lines = [
         "📊 <b>Статистика</b>",
+        "⠀",
         f"Аптайм: {format_uptime(started_at)}",
         f"Торрентов в кэше: {stats.torrents}",
         f"Поисковых выдач: {stats.queries}",
@@ -108,6 +109,7 @@ async def show_health(
     disk = shutil.disk_usage("/")
     lines = [
         "🩺 <b>Состояние сервиса</b>",
+        "⠀",
         f"⏱ Аптайм: {format_uptime(started_at)}",
         f"🗄 БД: ok · {format_size(db_size)}",
         f"💽 Диск бота: свободно {format_size(disk.free)}",
@@ -189,7 +191,7 @@ async def broadcast_confirm(
     await query.answer("Отправляю…")
     delivered = await broadcaster.broadcast(bot, user_ids, text)
     await message.edit_text(
-        padded(f"📢 Доставлено {delivered} из {len(user_ids)}:\n\n{text}"),
+        padded(f"📢 Доставлено {delivered} из {len(user_ids)}:\n⠀\n{text}"),
         parse_mode=ParseMode.HTML,
     )
 
@@ -207,7 +209,7 @@ async def show_indexers(message: Message, jackett: JackettClient) -> None:
         await status.edit_text(padded("Индексеры не настроены — откройте Jackett UI."))
         return
     healthy = sum(1 for i in indexers if not i.get("Error"))
-    lines = [f"🧲 <b>Индексеры Jackett</b> — {healthy}/{len(indexers)} в строю\n"]
+    lines = [f"🧲 <b>Индексеры Jackett</b> — {healthy}/{len(indexers)} в строю", "⠀"]
     for indexer in sorted(indexers, key=lambda i: bool(i.get("Error")), reverse=True):
         name = html.escape(str(indexer.get("Name", "?")))
         error = indexer.get("Error")

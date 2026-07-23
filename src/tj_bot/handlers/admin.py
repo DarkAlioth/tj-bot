@@ -139,7 +139,7 @@ async def send_category_menu(
         ]
     )
 
-    lines = [f"📤 <b>{name}</b>"]
+    lines = [f"📤 <b>{name}</b>", "⠀"]
     if size is not None:
         lines.append(f"Размер: <code>{format_size(size)}</code>")
     free_text = format_size(free) if free >= 0 else "н/д"
@@ -164,7 +164,7 @@ async def _start_progress(
     """Turn ``status`` into the live progress message and start the watcher."""
     try:
         await status.edit_text(
-            padded(f"⬇️ Отправлено на сервер: <b>{name}</b>\nОжидаю прогресс…")
+            padded(f"⬇️ Отправлено на сервер: <b>{name}</b>\n⠀\nОжидаю прогресс…")
         )
     except TelegramAPIError:
         # torrent is already added; progress edits are best-effort like the watcher

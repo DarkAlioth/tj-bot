@@ -19,12 +19,12 @@ A self-hosted Telegram bot for torrent search. It queries a private [Jackett](ht
 **Search**
 - Full-text search across all Jackett indexers: `/s <query>`
 - Paginated result cards — title, uploader, description, seeders/peers, size, category, tracker, publish date
-- Directional sorting (seeders / size ↓↑ / date ↓↑), category picker, and stackable filters (min seeders, size range, freshness)
-- Compact list view (📋): ten results per page with number buttons jumping straight to a card
+- Directional sorting (seeders / size ↓↑ / date ↓↑) and stackable filters: category, min seeders, size range, freshness
+- Compact list view (📋): ten results per page with publish dates, number buttons jumping straight to a card, and the same sort/filter controls as the card view
 - **Instant cache** — repeat queries render from PostgreSQL with no tracker round-trip (⚡ badge), with a 🔄 refresh button for a live re-query
 - Per-user search history (`/history`) with one-tap replay, and `/last` to repeat the most recent query
 - **Inline mode** — `@your_bot <query>` in any chat serves cached results as shareable cards (enable via BotFather → `/setinline`)
-- **Favorites** — star any result (⭐); `/favorites` keeps a snapshot that survives cache expiry, with download / send-to-server / remove actions
+- **Favorites** — save any result (☆ Сохранить → ⭐ Сохранено, state shown while paging); `/favorites` keeps a snapshot that survives cache expiry, with download / send-to-server / remove actions
 
 **Downloads**
 - Download the `.torrent` file straight into the chat

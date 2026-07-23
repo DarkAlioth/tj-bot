@@ -180,14 +180,23 @@ class TorrentRepo:
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
-    async def get_result_list(self, query_hash: str, limit: int) -> list[Torrent]:
-        """Top results of a cached search, best-seeded first."""
+    async def get_result_list(
+        self,
+        query_hash: str,
+        limit: int,
+        offset: int = 0,
+        category: str | None = None,
+        order: str = "se",
+        filters: ResultFilters | None = None,
+    ) -> list[Torrent]:
+        """A page of results of a cached search in the requested order."""
         stmt = (
             select(Torrent)
             .select_from(Torrent, SearchQueryTorrent, SearchQuery)
-            .where(*self._results_filter(query_hash, None))
-            .order_by(*self.SORT_ORDERS["se"])
+            .where(*self._results_filter(query_hash, category, filters))
+            .order_by(*self.SORT_ORDERS.get(order, self.SORT_ORDERS["se"]))
             .limit(limit)
+            .offset(offset)
         )
         return list((await self.session.execute(stmt)).scalars())
 

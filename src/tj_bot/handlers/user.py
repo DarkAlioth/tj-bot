@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import html
 import logging
 
 from aiogram import F, Router, types
@@ -40,6 +41,7 @@ SEARCHING_TEXT = "Поиск выполняется, ожидайте..."
 STALE_QUERY_TEXT = "Запрос устарел, выполните новый поиск: /s"
 
 DEFAULT_FILTER = "000"
+LIST_PAGE_SIZE = 10
 SORT_LABELS = {
     "se": "Сиды ↓",
     "sz": "Размер ↓",
@@ -178,11 +180,16 @@ def result_keyboard(
             )
         )
     kb.append(download_row)
-    # row 3: navigation
+    # row 3: navigation (📋 opens the compact list at this card's list page)
     nav = []
     if has_prev:
         nav.append(types.InlineKeyboardButton(text="⬅", callback_data=pg2("pv")))
     nav.append(types.InlineKeyboardButton(text="🔄", callback_data=Upd(qh=qh).pack()))
+    nav.append(
+        types.InlineKeyboardButton(
+            text="📋", callback_data=pg2("ls", p=page // LIST_PAGE_SIZE)
+        )
+    )
     if has_next:
         nav.append(types.InlineKeyboardButton(text="➡", callback_data=pg2("nx")))
     kb.append(nav)
@@ -497,6 +504,96 @@ async def go_searched(
         callback_data.c,
         callback_data.s,
         callback_data.fl,
+    )
+
+
+def list_line(index: int, torrent: Torrent) -> str:
+    # unescape before truncating so a sliced entity ("&am…") cannot leak out
+    title = html.unescape(torrent.title)
+    if len(title) > 48:
+        title = title[:47] + "…"
+    size_gb = round(torrent.size / 1024 / 1024 / 1024, 1)
+    return (
+        f'{index}. <a href="{torrent.details_url}">{html.escape(title)}</a>'
+        f" — {size_gb} GB · 🌱{torrent.seeders}"
+    )
+
+
+@user_router.callback_query(Pg2.filter(F.t == "ls"))
+async def go_list(query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo) -> None:
+    """Compact numbered list; number buttons jump to the matching card."""
+    message = query.message
+    search = await repo.get_search(callback_data.qh)
+    if search is None or not isinstance(message, Message):
+        await query.answer()
+        return
+    category = await resolve_category(repo, callback_data.qh, callback_data.c)
+    filters = ResultFilters.from_code(callback_data.fl)
+    if category is None and not filters.is_active:
+        counter = search.result_count
+    else:
+        counter = await repo.count_results(callback_data.qh, category, filters)
+    offset = callback_data.p * LIST_PAGE_SIZE
+    torrents = await repo.get_result_list(
+        callback_data.qh,
+        LIST_PAGE_SIZE,
+        offset,
+        category,
+        callback_data.s,
+        filters,
+    )
+    if not torrents:
+        await query.answer("Ничего не найдено с этими фильтрами", show_alert=True)
+        return
+
+    def pg2(t: str, p: int) -> str:
+        return Pg2(
+            t=t,
+            qh=callback_data.qh,
+            p=p,
+            c=callback_data.c,
+            s=callback_data.s,
+            fl=callback_data.fl,
+        ).pack()
+
+    lines = [
+        f"⠀\n⠀<b>Результаты {offset + 1}–{offset + len(torrents)}</b>"
+        f" из <b>{counter}</b>\n"
+    ]
+    lines.extend(
+        list_line(offset + i + 1, torrent) for i, torrent in enumerate(torrents)
+    )
+    number_rows = [
+        [
+            types.InlineKeyboardButton(
+                text=str(offset + i + 1), callback_data=pg2("fs", offset + i)
+            )
+            for i in range(start, min(start + 5, len(torrents)))
+        ]
+        for start in range(0, len(torrents), 5)
+    ]
+    nav = []
+    if callback_data.p > 0:
+        nav.append(
+            types.InlineKeyboardButton(
+                text="⬅", callback_data=pg2("ls", callback_data.p - 1)
+            )
+        )
+    nav.append(
+        types.InlineKeyboardButton(text="🃏 Карточка", callback_data=pg2("fs", offset))
+    )
+    if offset + len(torrents) < counter:
+        nav.append(
+            types.InlineKeyboardButton(
+                text="➡", callback_data=pg2("ls", callback_data.p + 1)
+            )
+        )
+    await query.answer()
+    await message.edit_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.HTML,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[*number_rows, nav]),
+        disable_web_page_preview=True,
     )
 
 

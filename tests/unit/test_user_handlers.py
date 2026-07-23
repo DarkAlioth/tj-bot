@@ -13,7 +13,9 @@ from tj_bot.handlers.user import (
     DEFAULT_SORT,
     Pg2,
     category_token,
+    go_list,
     go_search,
+    list_line,
     render_page,
     resolve_category,
     srch_torrent,
@@ -157,6 +159,7 @@ async def test_render_page_navigation_buttons() -> None:
         "💾 Скачать",
         "⬅",
         "🔄",
+        "📋",
         "➡",
     ]
 
@@ -167,6 +170,66 @@ async def test_render_page_navigation_buttons() -> None:
         if button.callback_data
     ]
     assert all(len(data.encode()) <= 64 for data in callbacks)
+
+
+async def test_list_view_renders_numbered_page() -> None:
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=25)
+    repo.get_result_list.return_value = [
+        make_torrent_model(id=i, hash=f"h{i}", title=f"Item {i}") for i in range(10)
+    ]
+    data = Pg2(t="ls", qh="qh", p=1, c=ALL_CATEGORIES, s="se", fl="000")
+
+    await go_list(query, data, repo)
+
+    assert repo.get_result_list.await_args.args[2] == 10  # offset = page * size
+    text = telegram_message.edit_text.await_args.args[0]
+    assert "Результаты 11–20" in text
+    assert "Item 0" in text
+    keyboard = telegram_message.edit_text.await_args.kwargs["reply_markup"]
+    numbers = [b for row in keyboard.inline_keyboard[:-1] for b in row]
+    assert [b.text for b in numbers] == [str(n) for n in range(11, 21)]
+    first = Pg2.unpack(numbers[0].callback_data)
+    assert first.t == "fs"
+    assert first.p == 10
+    nav = keyboard.inline_keyboard[-1]
+    assert [b.text for b in nav] == ["⬅", "🃏 Карточка", "➡"]
+    assert all(
+        len(b.callback_data.encode()) <= 64
+        for row in keyboard.inline_keyboard
+        for b in row
+    )
+
+
+async def test_list_view_empty_page_alerts() -> None:
+    query = AsyncMock()
+    telegram_message = AsyncMock(spec=Message)
+    telegram_message.edit_text = AsyncMock()
+    query.message = telegram_message
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_search.return_value = SearchQuery(id=1, hash="qh", result_count=0)
+    repo.get_result_list.return_value = []
+    data = Pg2(t="ls", qh="qh", p=0, c=ALL_CATEGORIES, s="se", fl="000")
+
+    await go_list(query, data, repo)
+
+    assert query.answer.await_args.kwargs.get("show_alert") is True
+    telegram_message.edit_text.assert_not_awaited()
+
+
+def test_list_line_truncates_after_unescaping() -> None:
+    torrent = make_torrent_model(title="Movie &amp; " + "x" * 60)
+
+    line = list_line(3, torrent)
+
+    assert line.startswith("3. ")
+    assert "…" in line
+    assert "Movie &amp; x" in line  # re-escaped after the cut
+    assert "1.0 GB" in line
 
 
 async def test_categories_menu_has_back_button_to_origin_card() -> None:

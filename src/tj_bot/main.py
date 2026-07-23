@@ -73,8 +73,9 @@ def register_global_middlewares(
     database_middleware = DatabaseMiddleware(session_pool)
     access_middleware = AccessMiddleware()
     # config (admin ids) -> throttling (spam never opens a session) -> database
-    # (session + repo) -> access (track user, drop blocked); on both observers
-    for observer in (dp.message, dp.callback_query):
+    # (session + repo) -> access (track user, drop blocked); on all observers
+    # (inline queries pass throttling untouched — they only read the cache)
+    for observer in (dp.message, dp.callback_query, dp.inline_query):
         observer.outer_middleware(config_middleware)
         observer.outer_middleware(throttling_middleware)
         observer.outer_middleware(database_middleware)

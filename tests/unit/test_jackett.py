@@ -41,6 +41,54 @@ def test_parse_result_without_link_is_skipped() -> None:
     assert parse_result({**RESULT, "Link": None}) is None
 
 
+async def test_search_retries_once_on_connection_drop(
+    jackett_env: "Callable[[web.Application], Awaitable[JackettClient]]",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json as jsonlib
+
+    monkeypatch.setattr("tj_bot.services.jackett.RETRY_DELAY_SECONDS", 0)
+    state = {"attempts": 0}
+
+    async def results(request: web.Request) -> web.Response:
+        state["attempts"] += 1
+        if state["attempts"] == 1:
+            assert request.transport is not None  # noqa: S101
+            request.transport.close()  # drop mid-request -> client conn error
+        return web.Response(
+            text=jsonlib.dumps({"Results": [RESULT]}),
+            content_type="application/json",
+        )
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/all/results", results)
+    client = await jackett_env(app)
+
+    items = await client.search("ubuntu")
+
+    assert state["attempts"] == 2
+    assert len(items) == 1
+
+
+async def test_search_gives_up_after_second_connection_drop(
+    jackett_env: "Callable[[web.Application], Awaitable[JackettClient]]",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("tj_bot.services.jackett.RETRY_DELAY_SECONDS", 0)
+
+    async def results(request: web.Request) -> web.Response:
+        assert request.transport is not None  # noqa: S101
+        request.transport.close()
+        return web.Response()
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/all/results", results)
+    client = await jackett_env(app)
+
+    with pytest.raises(JackettError, match="failed"):
+        await client.search("ubuntu")
+
+
 @pytest.fixture
 async def jackett_env() -> AsyncGenerator[
     Callable[[web.Application], Awaitable[JackettClient]]

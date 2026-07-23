@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import hashlib
 import html
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 200
 MAX_DESCRIPTION_CHARS = 500
+# one retry on transient connection failures (not timeouts: those are slow)
+RETRY_DELAY_SECONDS = 2.0
 
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]", flags=re.UNICODE)
 
@@ -155,23 +158,45 @@ class JackettClient:
             == (base.port or _default_port(base.scheme))
         )
 
+    async def _fetch_json(
+        self, url: str, params: dict[str, str], what: str
+    ) -> dict[str, Any]:
+        """GET returning parsed JSON; one retry on transient connection drops."""
+        for attempt in range(2):
+            try:
+                async with self._get_session().get(url, params=params) as resp:
+                    if resp.status != 200:
+                        msg = f"Jackett {what} returned HTTP {resp.status}"
+                        raise JackettError(msg)
+                    payload = await resp.json()
+            except aiohttp.ClientConnectionError as exc:
+                if attempt == 0:
+                    logger.warning(
+                        "Jackett %s connection failed, retrying: %r", what, exc
+                    )
+                    await asyncio.sleep(RETRY_DELAY_SECONDS)
+                    continue
+                msg = f"Jackett {what} failed: {exc!r}"
+                raise JackettError(msg) from exc
+            except (aiohttp.ClientError, TimeoutError) as exc:
+                msg = f"Jackett {what} failed: {exc!r}"
+                raise JackettError(msg) from exc
+            except ValueError as exc:
+                msg = f"Jackett {what} returned invalid JSON"
+                raise JackettError(msg) from exc
+            if not isinstance(payload, dict):
+                msg = f"Jackett {what} returned unexpected payload"
+                raise JackettError(msg)
+            return payload
+        msg = f"Jackett {what} failed after retry"
+        raise JackettError(msg)
+
     async def search(self, query: str) -> list[TorrentData]:
         url = f"{self._base_url}/api/v2.0/indexers/all/results"
         # Query is quoted to keep the legacy phrase-search behavior;
         # aiohttp percent-encodes all parameter values safely.
         params = {"apikey": self._api_key, "Query": f'"{query[:MAX_QUERY_LENGTH]}"'}
-        try:
-            async with self._get_session().get(url, params=params) as resp:
-                if resp.status != 200:
-                    msg = f"Jackett search returned HTTP {resp.status}"
-                    raise JackettError(msg)
-                payload = await resp.json()
-        except (aiohttp.ClientError, TimeoutError) as exc:
-            msg = f"Jackett search failed: {exc!r}"
-            raise JackettError(msg) from exc
-        except ValueError as exc:
-            msg = "Jackett search returned invalid JSON"
-            raise JackettError(msg) from exc
+        payload = await self._fetch_json(url, params, "search")
         results = payload.get("Results") or []
         parsed = [item for item in map(parse_result, results) if item is not None]
         logger.info(
@@ -192,18 +217,7 @@ class JackettClient:
         """
         url = f"{self._base_url}/api/v2.0/indexers/all/results"
         params = {"apikey": self._api_key, "Query": ""}
-        try:
-            async with self._get_session().get(url, params=params) as resp:
-                if resp.status != 200:
-                    msg = f"Jackett indexers returned HTTP {resp.status}"
-                    raise JackettError(msg)
-                payload = await resp.json()
-        except (aiohttp.ClientError, TimeoutError) as exc:
-            msg = f"Jackett indexers failed: {exc!r}"
-            raise JackettError(msg) from exc
-        except ValueError as exc:
-            msg = "Jackett indexers returned invalid JSON"
-            raise JackettError(msg) from exc
+        payload = await self._fetch_json(url, params, "indexers")
         indexers = payload.get("Indexers")
         if not isinstance(indexers, list):
             raise JackettError("Unexpected indexers payload")

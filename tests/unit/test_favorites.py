@@ -2,6 +2,7 @@ import datetime
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
+from aiogram import types
 from aiogram.types import CallbackQuery, Message
 
 from tj_bot.config import AppConfig
@@ -48,28 +49,53 @@ def make_query() -> AsyncMock:
     query = AsyncMock(spec=CallbackQuery)
     query.from_user = MagicMock()
     query.from_user.id = 111
+    query.data = None
     message = AsyncMock(spec=Message)
     message.answer = AsyncMock()
     message.edit_text = AsyncMock()
+    message.edit_reply_markup = AsyncMock()
     message.answer_document = AsyncMock()
+    message.reply_markup = None
     query.message = message
     query.answer = AsyncMock()
     return query
 
 
-async def test_toggle_adds_then_removes() -> None:
+def card_markup(fav_data: str) -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="💾 Скачать", callback_data="dlt:download:h1"
+                ),
+                types.InlineKeyboardButton(text="☆ Сохранить", callback_data=fav_data),
+            ]
+        ]
+    )
+
+
+async def test_toggle_adds_then_removes_and_swaps_button() -> None:
     query = make_query()
+    data = Dlt(type="fav", hash="h1")
+    query.data = data.pack()
+    query.message.reply_markup = card_markup(data.pack())
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_torrent_by_hash.return_value = MagicMock(hash="h1")
     repo.add_favorite.return_value = True
 
-    await toggle_favorite(query, Dlt(type="fav", hash="h1"), repo)
+    await toggle_favorite(query, data, repo)
     assert "⭐" in query.answer.await_args.args[0]
+    swapped = query.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+    assert swapped.inline_keyboard[0][1].text == "⭐ Сохранено"
+    assert swapped.inline_keyboard[0][0].text == "💾 Скачать"  # untouched
 
+    query.message.reply_markup = swapped
     repo.add_favorite.return_value = False
-    await toggle_favorite(query, Dlt(type="fav", hash="h1"), repo)
+    await toggle_favorite(query, data, repo)
     repo.remove_favorite_by_hash.assert_awaited_once_with(111, "h1")
     assert "Убрано" in query.answer.await_args.args[0]
+    swapped_back = query.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+    assert swapped_back.inline_keyboard[0][1].text == "☆ Сохранить"
 
 
 async def test_toggle_stale_card_alerts() -> None:

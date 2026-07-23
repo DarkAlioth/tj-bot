@@ -3,6 +3,7 @@ import logging
 
 from aiogram import F, Router, types
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.callback_data import CallbackData
 from aiogram.filters.command import Command
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
@@ -11,7 +12,7 @@ from tj_bot.config import AppConfig
 from tj_bot.db.models import Favorite
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers.admin import KIND_FAVORITE, send_category_menu
-from tj_bot.handlers.user import Dlt
+from tj_bot.handlers.user import FAV_SAVE_LABEL, FAV_SAVED_LABEL, Dlt
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
     JackettClient,
@@ -34,6 +35,23 @@ class Fav(CallbackData, prefix="fav"):
     id: int  # favorite id; for a == "ls" the list page number
 
 
+def swap_fav_button(
+    markup: types.InlineKeyboardMarkup, pressed: str, is_fav: bool
+) -> types.InlineKeyboardMarkup:
+    """The same keyboard with the pressed favorite button relabeled."""
+    label = FAV_SAVED_LABEL if is_fav else FAV_SAVE_LABEL
+    rows = [
+        [
+            button.model_copy(update={"text": label})
+            if button.callback_data == pressed
+            else button
+            for button in row
+        ]
+        for row in markup.inline_keyboard
+    ]
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 @favorites_router.callback_query(Dlt.filter(F.type == "fav"))
 async def toggle_favorite(
     query: CallbackQuery, callback_data: Dlt, repo: TorrentRepo
@@ -43,10 +61,25 @@ async def toggle_favorite(
         await query.answer("Карточка устарела, повторите поиск", show_alert=True)
         return
     if await repo.add_favorite(query.from_user.id, torrent):
-        await query.answer("⭐ Добавлено в избранное — /favorites")
+        is_fav = True
+        await query.answer("⭐ Сохранено в избранное — /favorites")
     else:
         await repo.remove_favorite_by_hash(query.from_user.id, torrent.hash)
+        is_fav = False
         await query.answer("Убрано из избранного")
+    message = query.message
+    if (
+        isinstance(message, Message)
+        and message.reply_markup is not None
+        and query.data is not None
+    ):
+        try:
+            await message.edit_reply_markup(
+                reply_markup=swap_fav_button(message.reply_markup, query.data, is_fav)
+            )
+        except TelegramBadRequest:
+            # double-tap: the keyboard already shows the right label
+            logger.debug("Favorite button relabel skipped (message not modified)")
 
 
 def favorite_line(index: int, favorite: Favorite) -> str:

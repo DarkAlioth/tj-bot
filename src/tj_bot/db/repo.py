@@ -330,6 +330,14 @@ class TorrentRepo:
         )
         return (await self.session.execute(stmt)).scalar() is not None
 
+    async def is_favorite(self, user_id: int, torrent_hash: str) -> bool:
+        stmt = (
+            select(Favorite.id)
+            .where(Favorite.user_id == user_id, Favorite.torrent_hash == torrent_hash)
+            .limit(1)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none() is not None
+
     async def remove_favorite_by_hash(self, user_id: int, torrent_hash: str) -> None:
         await self.session.execute(
             delete(Favorite).where(

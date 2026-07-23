@@ -11,6 +11,7 @@ from tj_bot.db.filters import ResultFilters
 from tj_bot.db.models import (
     BotUser,
     DownloadEvent,
+    Favorite,
     MagnetLink,
     SearchEvent,
     SearchQuery,
@@ -305,6 +306,66 @@ class TorrentRepo:
     async def get_torrent_by_hash(self, torrent_hash: str) -> Torrent | None:
         stmt = select(Torrent).where(Torrent.hash == torrent_hash)
         return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def add_favorite(self, user_id: int, torrent: Torrent) -> bool:
+        """Star a cached torrent; returns False when already starred."""
+        stmt = (
+            pg_insert(Favorite)
+            .values(
+                user_id=user_id,
+                torrent_hash=torrent.hash,
+                title=torrent.title,
+                category=torrent.category,
+                tracker=torrent.tracker,
+                details_url=torrent.details_url,
+                download_url=torrent.download_url,
+                seeders=torrent.seeders,
+                size=torrent.size,
+                published_at=torrent.published_at,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[Favorite.user_id, Favorite.torrent_hash]
+            )
+            .returning(Favorite.id)
+        )
+        return (await self.session.execute(stmt)).scalar() is not None
+
+    async def remove_favorite_by_hash(self, user_id: int, torrent_hash: str) -> None:
+        await self.session.execute(
+            delete(Favorite).where(
+                Favorite.user_id == user_id, Favorite.torrent_hash == torrent_hash
+            )
+        )
+
+    async def remove_favorite(self, user_id: int, favorite_id: int) -> None:
+        await self.session.execute(
+            delete(Favorite).where(
+                Favorite.user_id == user_id, Favorite.id == favorite_id
+            )
+        )
+
+    async def get_favorite(self, user_id: int, favorite_id: int) -> Favorite | None:
+        """The user's own favorite by id — the user filter doubles as authz."""
+        stmt = select(Favorite).where(
+            Favorite.user_id == user_id, Favorite.id == favorite_id
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def list_favorites(
+        self, user_id: int, limit: int, offset: int = 0
+    ) -> list[Favorite]:
+        stmt = (
+            select(Favorite)
+            .where(Favorite.user_id == user_id)
+            .order_by(Favorite.created_at.desc(), Favorite.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def count_favorites(self, user_id: int) -> int:
+        stmt = select(func.count(Favorite.id)).where(Favorite.user_id == user_id)
+        return (await self.session.execute(stmt)).scalar_one()
 
     async def save_magnet(self, url: str) -> str:
         """Store the magnet URL; returns its hash used in callback data."""

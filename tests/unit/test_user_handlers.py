@@ -157,6 +157,7 @@ async def test_render_page_navigation_buttons() -> None:
         "Сиды ↓",
         "🔎 Фильтр",
         "💾 Скачать",
+        "⭐",
         "⬅",
         "🔄",
         "📋",

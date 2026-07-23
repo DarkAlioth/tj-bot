@@ -1,6 +1,14 @@
 import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, func, text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -88,6 +96,28 @@ class MagnetLink(Base):
 
     hash: Mapped[str] = mapped_column(String(32), primary_key=True)
     url: Mapped[str]
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Favorite(Base):
+    """A user's starred torrent — denormalized snapshot immune to cache TTL."""
+
+    __tablename__ = "favorites"
+    __table_args__ = (UniqueConstraint("user_id", "torrent_hash"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    torrent_hash: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str]
+    category: Mapped[str]
+    tracker: Mapped[str] = mapped_column(String(128))
+    details_url: Mapped[str]
+    download_url: Mapped[str]
+    seeders: Mapped[int]
+    size: Mapped[int] = mapped_column(BigInteger)
+    published_at: Mapped[datetime.date]
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

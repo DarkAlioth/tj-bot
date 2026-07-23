@@ -85,6 +85,7 @@ def register_global_middlewares(
 USER_COMMANDS = [
     BotCommand(command="s", description="🔎 Поиск торрентов"),
     BotCommand(command="history", description="🕘 История поиска"),
+    BotCommand(command="favorites", description="⭐ Избранное"),
 ]
 ADMIN_ONLY_COMMANDS = [
     BotCommand(command="dl", description="🖥 Консоль qBittorrent"),

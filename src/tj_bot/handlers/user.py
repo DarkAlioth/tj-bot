@@ -165,12 +165,16 @@ def result_keyboard(
             ),
         ]
     ]
-    # row 2: download (+ send-to-server for admins)
+    # row 2: download, favorite toggle (+ send-to-server for admins)
     download_row = [
         types.InlineKeyboardButton(
             text="💾 Скачать",
             callback_data=Dlt(type="download", hash=torrent_hash).pack(),
-        )
+        ),
+        types.InlineKeyboardButton(
+            text="⭐",
+            callback_data=Dlt(type="fav", hash=torrent_hash).pack(),
+        ),
     ]
     if show_server:
         download_row.append(

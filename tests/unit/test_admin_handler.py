@@ -293,6 +293,52 @@ async def test_choice_stale_torrent_alerts() -> None:
     assert query.answer.await_args.kwargs.get("show_alert") is True
 
 
+async def test_choice_adds_favorite_with_selected_category() -> None:
+    from tj_bot.handlers.admin import KIND_FAVORITE
+
+    query = make_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    favorite = MagicMock()
+    favorite.title = "Saved Movie"
+    favorite.download_url = "http://jackett:9117/dl/9"
+    repo.get_favorite.return_value = favorite
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.return_value = b"data"
+    qbit = make_qbit()
+    data = Dsc(k=KIND_FAVORITE, t=NO_CATEGORY, hash="9")
+
+    await choose_category(
+        query, data, repo, jackett, qbit, make_config(), cast(Bot, AsyncMock())
+    )
+
+    repo.get_favorite.assert_awaited_once_with(111, 9)
+    qbit.add_torrent_file.assert_awaited_once()
+    repo.record_download.assert_awaited_once_with(111, "Saved Movie", "server")
+    await drain_watchers()
+
+
+async def test_choice_favorite_bad_id_is_noop() -> None:
+    from tj_bot.handlers.admin import KIND_FAVORITE
+
+    query = make_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    qbit = make_qbit()
+    data = Dsc(k=KIND_FAVORITE, t=NO_CATEGORY, hash="not-a-number")
+
+    await choose_category(
+        query,
+        data,
+        repo,
+        AsyncMock(spec=JackettClient),
+        qbit,
+        make_config(),
+        cast(Bot, AsyncMock()),
+    )
+
+    repo.get_favorite.assert_not_awaited()
+    qbit.add_torrent_file.assert_not_awaited()
+
+
 async def test_choice_adds_magnet_with_selected_category() -> None:
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)

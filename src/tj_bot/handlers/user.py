@@ -26,8 +26,17 @@ from tj_bot.services.jackett import (
     safe_torrent_filename,
 )
 
-# Dlt with type="server" and category_token are shared with the admin router
-__all__ = ["Dlt", "Pg2", "category_token", "result_keyboard", "user_router"]
+# Dlt with type="server" and category_token are shared with the admin router;
+# the favorite labels are swapped in place by the favorites router
+__all__ = [
+    "FAV_SAVED_LABEL",
+    "FAV_SAVE_LABEL",
+    "Dlt",
+    "Pg2",
+    "category_token",
+    "result_keyboard",
+    "user_router",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +60,14 @@ SORT_LABELS = {
 }
 SORT_NEXT = {"se": "sz", "sz": "za", "za": "dt", "dt": "da", "da": "se"}
 
+# Favorite toggle labels; favorites.py swaps them in place on toggle.
+FAV_SAVE_LABEL = "☆ Сохранить"
+FAV_SAVED_LABEL = "⭐ Сохранено"
+
+# Flt.o — which view the filter menu returns to on apply/reset
+ORIGIN_CARD = "c"
+ORIGIN_LIST = "l"
+
 
 class Dlt(CallbackData, prefix="dlt"):
     type: str
@@ -72,6 +89,7 @@ class Flt(CallbackData, prefix="flt"):
     c: str
     s: str
     fl: str
+    o: str
 
 
 class Upd(CallbackData, prefix="upd"):
@@ -131,6 +149,24 @@ def text_srch_msg(
     return text
 
 
+def filter_button(
+    qh: str, cat: str, sort: str, flt: str, origin: str
+) -> types.InlineKeyboardButton:
+    label = "🔎 Фильтр" + (
+        " ✅" if flt != DEFAULT_FILTER or cat != ALL_CATEGORIES else ""
+    )
+    return types.InlineKeyboardButton(
+        text=label,
+        callback_data=Flt(a="open", qh=qh, c=cat, s=sort, fl=flt, o=origin).pack(),
+    )
+
+
+def sort_button(pg2_pack: str, sort: str) -> types.InlineKeyboardButton:
+    return types.InlineKeyboardButton(
+        text=SORT_LABELS.get(sort, SORT_LABELS[DEFAULT_SORT]), callback_data=pg2_pack
+    )
+
+
 def result_keyboard(
     torrent_hash: str,
     qh: str,
@@ -141,28 +177,19 @@ def result_keyboard(
     has_next: bool,
     show_server: bool = False,
     flt: str = DEFAULT_FILTER,
+    is_fav: bool = False,
 ) -> types.InlineKeyboardMarkup:
     def pg2(t: str, p: int = page, c: str = cat, s: str = sort) -> str:
         return Pg2(t=t, qh=qh, p=p, c=c, s=s, fl=flt).pack()
 
-    filter_label = "🔎 Фильтр" + (" ✅" if flt != DEFAULT_FILTER else "")
-    # row 1: categories, sort, filters
+    # row 1: list mode (opens the list page holding this card), sort, filters
     kb = [
         [
             types.InlineKeyboardButton(
-                # carries the current position so the menu's back button can
-                # return to exactly this card
-                text="🗂 Категории",
-                callback_data=pg2("gs"),
+                text="📋 Список", callback_data=pg2("ls", p=page // LIST_PAGE_SIZE)
             ),
-            types.InlineKeyboardButton(
-                text=SORT_LABELS.get(sort, SORT_LABELS[DEFAULT_SORT]),
-                callback_data=pg2("fs", p=0, s=SORT_NEXT.get(sort, DEFAULT_SORT)),
-            ),
-            types.InlineKeyboardButton(
-                text=filter_label,
-                callback_data=Flt(a="open", qh=qh, c=cat, s=sort, fl=flt).pack(),
-            ),
+            sort_button(pg2("fs", p=0, s=SORT_NEXT.get(sort, DEFAULT_SORT)), sort),
+            filter_button(qh, cat, sort, flt, ORIGIN_CARD),
         ]
     ]
     # row 2: download, favorite toggle (+ send-to-server for admins)
@@ -172,7 +199,7 @@ def result_keyboard(
             callback_data=Dlt(type="download", hash=torrent_hash).pack(),
         ),
         types.InlineKeyboardButton(
-            text="⭐",
+            text=FAV_SAVED_LABEL if is_fav else FAV_SAVE_LABEL,
             callback_data=Dlt(type="fav", hash=torrent_hash).pack(),
         ),
     ]
@@ -184,16 +211,11 @@ def result_keyboard(
             )
         )
     kb.append(download_row)
-    # row 3: navigation (📋 opens the compact list at this card's list page)
+    # row 3: navigation
     nav = []
     if has_prev:
         nav.append(types.InlineKeyboardButton(text="⬅", callback_data=pg2("pv")))
     nav.append(types.InlineKeyboardButton(text="🔄", callback_data=Upd(qh=qh).pack()))
-    nav.append(
-        types.InlineKeyboardButton(
-            text="📋", callback_data=pg2("ls", p=page // LIST_PAGE_SIZE)
-        )
-    )
     if has_next:
         nav.append(types.InlineKeyboardButton(text="➡", callback_data=pg2("nx")))
     kb.append(nav)
@@ -225,6 +247,7 @@ async def render_result_card(
         await target.edit_text(NOT_FOUND_TEXT)
         return
     show_server = config.qbit_enabled and config.is_admin(user_id)
+    is_fav = user_id is not None and await repo.is_favorite(user_id, torrent.hash)
     keyboard = result_keyboard(
         torrent.hash,
         qh,
@@ -234,6 +257,7 @@ async def render_result_card(
         has_prev=False,
         has_next=counter > 1,
         show_server=show_server,
+        is_fav=is_fav,
     )
     await target.edit_text(
         "\n".join(text_srch_msg(1, counter, torrent, from_cache)),
@@ -458,9 +482,9 @@ async def render_page(
         else:
             await query.answer()
         return
-    show_server = config.qbit_enabled and config.is_admin(
-        query.from_user.id if query.from_user else None
-    )
+    user_id = query.from_user.id if query.from_user else None
+    show_server = config.qbit_enabled and config.is_admin(user_id)
+    is_fav = user_id is not None and await repo.is_favorite(user_id, torrent.hash)
     keyboard = result_keyboard(
         torrent.hash,
         qh,
@@ -471,6 +495,7 @@ async def render_page(
         has_next=page + 1 < counter,
         show_server=show_server,
         flt=flt,
+        is_fav=is_fav,
     )
     await query.answer()
     await message.edit_text(
@@ -535,48 +560,44 @@ def list_line(index: int, torrent: Torrent) -> str:
     if len(title) > 48:
         title = title[:47] + "…"
     size_gb = round(torrent.size / 1024 / 1024 / 1024, 1)
+    published = torrent.published_at.strftime("%d.%m.%y")
     return (
         f'{index}. <a href="{torrent.details_url}">{html.escape(title)}</a>'
-        f" — {size_gb} GB · 🌱{torrent.seeders}"
+        f" — {size_gb} GB · 🌱{torrent.seeders} · {published}"
     )
 
 
-@user_router.callback_query(Pg2.filter(F.t == "ls"))
-async def go_list(query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo) -> None:
+async def render_list(
+    query: CallbackQuery,
+    repo: TorrentRepo,
+    qh: str,
+    page: int,
+    cat: str,
+    sort: str,
+    flt: str,
+) -> None:
     """Compact numbered list; number buttons jump to the matching card."""
     message = query.message
-    search = await repo.get_search(callback_data.qh)
+    search = await repo.get_search(qh)
     if search is None or not isinstance(message, Message):
         await query.answer()
         return
-    category = await resolve_category(repo, callback_data.qh, callback_data.c)
-    filters = ResultFilters.from_code(callback_data.fl)
+    category = await resolve_category(repo, qh, cat)
+    filters = ResultFilters.from_code(flt)
     if category is None and not filters.is_active:
         counter = search.result_count
     else:
-        counter = await repo.count_results(callback_data.qh, category, filters)
-    offset = callback_data.p * LIST_PAGE_SIZE
+        counter = await repo.count_results(qh, category, filters)
+    offset = page * LIST_PAGE_SIZE
     torrents = await repo.get_result_list(
-        callback_data.qh,
-        LIST_PAGE_SIZE,
-        offset,
-        category,
-        callback_data.s,
-        filters,
+        qh, LIST_PAGE_SIZE, offset, category, sort, filters
     )
     if not torrents:
         await query.answer("Ничего не найдено с этими фильтрами", show_alert=True)
         return
 
-    def pg2(t: str, p: int) -> str:
-        return Pg2(
-            t=t,
-            qh=callback_data.qh,
-            p=p,
-            c=callback_data.c,
-            s=callback_data.s,
-            fl=callback_data.fl,
-        ).pack()
+    def pg2(t: str, p: int, s: str = sort) -> str:
+        return Pg2(t=t, qh=qh, p=p, c=cat, s=s, fl=flt).pack()
 
     lines = [
         f"⠀\n⠀<b>Результаты {offset + 1}–{offset + len(torrents)}</b>"
@@ -585,6 +606,12 @@ async def go_list(query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo) -
     lines.extend(
         list_line(offset + i + 1, torrent) for i, torrent in enumerate(torrents)
     )
+    # row 1 mirrors the card: back to card view, sort, filters
+    top_row = [
+        types.InlineKeyboardButton(text="🃏 Карточка", callback_data=pg2("fs", offset)),
+        sort_button(pg2("ls", 0, s=SORT_NEXT.get(sort, DEFAULT_SORT)), sort),
+        filter_button(qh, cat, sort, flt, ORIGIN_LIST),
+    ]
     number_rows = [
         [
             types.InlineKeyboardButton(
@@ -595,27 +622,34 @@ async def go_list(query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo) -
         for start in range(0, len(torrents), 5)
     ]
     nav = []
-    if callback_data.p > 0:
+    if page > 0:
         nav.append(
-            types.InlineKeyboardButton(
-                text="⬅", callback_data=pg2("ls", callback_data.p - 1)
-            )
+            types.InlineKeyboardButton(text="⬅", callback_data=pg2("ls", page - 1))
         )
-    nav.append(
-        types.InlineKeyboardButton(text="🃏 Карточка", callback_data=pg2("fs", offset))
-    )
     if offset + len(torrents) < counter:
         nav.append(
-            types.InlineKeyboardButton(
-                text="➡", callback_data=pg2("ls", callback_data.p + 1)
-            )
+            types.InlineKeyboardButton(text="➡", callback_data=pg2("ls", page + 1))
         )
+    rows = [top_row, *number_rows, nav] if nav else [top_row, *number_rows]
     await query.answer()
     await message.edit_text(
         "\n".join(lines),
         parse_mode=ParseMode.HTML,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[*number_rows, nav]),
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
         disable_web_page_preview=True,
+    )
+
+
+@user_router.callback_query(Pg2.filter(F.t == "ls"))
+async def go_list(query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo) -> None:
+    await render_list(
+        query,
+        repo,
+        callback_data.qh,
+        callback_data.p,
+        callback_data.c,
+        callback_data.s,
+        callback_data.fl,
     )
 
 
@@ -623,6 +657,7 @@ async def go_list(query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo) -
 async def go_search(
     query: CallbackQuery, callback_data: Pg2, repo: TorrentRepo
 ) -> None:
+    """Legacy: cards sent before the category filter still carry 🗂 buttons."""
     message = query.message
     search = await repo.get_search(callback_data.qh)
     if search is None or not isinstance(message, Message):
@@ -679,14 +714,20 @@ async def go_search(
 
 
 def build_filter_menu(
-    qh: str, cat: str, sort: str, flt: str
+    qh: str, cat: str, sort: str, flt: str, origin: str, category_label: str
 ) -> tuple[str, types.InlineKeyboardMarkup]:
     filters = ResultFilters.from_code(flt)
 
-    def cb(action: str, new_fl: str) -> str:
-        return Flt(a=action, qh=qh, c=cat, s=sort, fl=new_fl).pack()
+    def cb(action: str, new_fl: str, c: str = cat) -> str:
+        return Flt(a=action, qh=qh, c=c, s=sort, fl=new_fl, o=origin).pack()
 
     rows = [
+        [
+            types.InlineKeyboardButton(
+                text=f"Категория: {category_label}  ›",
+                callback_data=cb("ct", flt),
+            )
+        ],
         [
             types.InlineKeyboardButton(
                 text=f"Сиды: {SEEDERS_LABELS[filters.seeders]}  🔁",
@@ -707,15 +748,82 @@ def build_filter_menu(
         ],
         [
             types.InlineKeyboardButton(
-                text="♻ Сброс", callback_data=cb("rs", DEFAULT_FILTER)
+                # reset clears the category as well — it is one of the filters
+                text="♻ Сброс",
+                callback_data=cb("rs", DEFAULT_FILTER, c=ALL_CATEGORIES),
             ),
             types.InlineKeyboardButton(
                 text="✅ Применить", callback_data=cb("ap", flt)
             ),
         ],
     ]
-    text = f"🔎 <b>Фильтры</b>\nАктивно: {filters.summary()}"
+    parts = []
+    if cat != ALL_CATEGORIES:
+        parts.append(f"категория {category_label}")
+    if filters.is_active:
+        parts.append(filters.summary())
+    active = ", ".join(parts) if parts else "не заданы"
+    # escape: size labels contain "<"/">" which break Telegram HTML parsing
+    text = f"🔎 <b>Фильтры</b>\nАктивно: {html.escape(active)}"
     return text, types.InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def render_category_picker(
+    query: CallbackQuery, callback_data: Flt, repo: TorrentRepo
+) -> None:
+    """Category choice inside the filter menu; every option reopens the menu."""
+    message = query.message
+    search = await repo.get_search(callback_data.qh)
+    if search is None or not isinstance(message, Message):
+        await query.answer(STALE_QUERY_TEXT, show_alert=True)
+        return
+    categories = await repo.get_categories(callback_data.qh)
+
+    def flt_open(c: str) -> str:
+        return Flt(
+            a="open",
+            qh=callback_data.qh,
+            c=c,
+            s=callback_data.s,
+            fl=callback_data.fl,
+            o=callback_data.o,
+        ).pack()
+
+    rows = [
+        [
+            types.InlineKeyboardButton(
+                text=f"Все - {search.result_count}",
+                callback_data=flt_open(ALL_CATEGORIES),
+            )
+        ]
+    ]
+    row: list[types.InlineKeyboardButton] = []
+    for category, count in categories:
+        row.append(
+            types.InlineKeyboardButton(
+                text=f"{category} - {count}",
+                callback_data=flt_open(category_token(category)),
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="◀️ Назад", callback_data=flt_open(callback_data.c)
+            )
+        ]
+    )
+    await query.answer()
+    await message.edit_text(
+        "⠀\n⠀<b>Категория результатов</b>:\n⠀",
+        parse_mode=ParseMode.HTML,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
+        disable_web_page_preview=True,
+    )
 
 
 @user_router.callback_query(Flt.filter())
@@ -727,21 +835,29 @@ async def filter_menu(
         await query.answer()
         return
     if callback_data.a in ("ap", "rs"):
-        # apply the working filter, or reset to none — both return to the card
+        # apply the working filter, or reset — return to the origin view
         applied = DEFAULT_FILTER if callback_data.a == "rs" else callback_data.fl
-        await render_page(
-            query,
-            repo,
-            config,
-            callback_data.qh,
-            0,
-            callback_data.c,
-            callback_data.s,
-            applied,
-        )
+        cat = ALL_CATEGORIES if callback_data.a == "rs" else callback_data.c
+        if callback_data.o == ORIGIN_LIST:
+            await render_list(
+                query, repo, callback_data.qh, 0, cat, callback_data.s, applied
+            )
+        else:
+            await render_page(
+                query, repo, config, callback_data.qh, 0, cat, callback_data.s, applied
+            )
         return
+    if callback_data.a == "ct":
+        await render_category_picker(query, callback_data, repo)
+        return
+    category = await resolve_category(repo, callback_data.qh, callback_data.c)
     text, keyboard = build_filter_menu(
-        callback_data.qh, callback_data.c, callback_data.s, callback_data.fl
+        callback_data.qh,
+        callback_data.c if category is not None else ALL_CATEGORIES,
+        callback_data.s,
+        callback_data.fl,
+        callback_data.o,
+        category if category is not None else "Все",
     )
     await query.answer()
     await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)

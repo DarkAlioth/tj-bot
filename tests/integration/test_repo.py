@@ -205,10 +205,14 @@ async def test_favorites_lifecycle_and_ttl_immunity(session: AsyncSession) -> No
     torrent = await repo.get_torrent_by_hash("f1")
     assert torrent is not None
 
+    assert await repo.is_favorite(111, "f1") is False
     assert await repo.add_favorite(111, torrent) is True
     assert await repo.add_favorite(111, torrent) is False  # unique per user
     assert await repo.add_favorite(222, torrent) is True
     await session.commit()
+
+    assert await repo.is_favorite(111, "f1") is True
+    assert await repo.is_favorite(333, "f1") is False  # scoped per user
 
     assert await repo.count_favorites(111) == 1
     mine = await repo.list_favorites(111, limit=10)

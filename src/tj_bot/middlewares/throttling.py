@@ -1,12 +1,16 @@
+import logging
 import time
 from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from tj_bot.config import AppConfig
+
+logger = logging.getLogger(__name__)
 
 MAX_TRACKED_USERS = 5000
 # Search commands and the cache-bypassing refresh button both hit trackers.
@@ -52,10 +56,21 @@ class ThrottlingMiddleware(BaseMiddleware):
             return text in ("/s", "/last") or text.startswith("/s ")
         return (event.data or "").startswith(COSTLY_CALLBACK_PREFIXES)
 
+    @staticmethod
+    async def _silence(event: Message | CallbackQuery) -> None:
+        """Ack a dropped callback so the client does not spin until timeout."""
+        if not isinstance(event, CallbackQuery):
+            return
+        try:
+            await event.answer()
+        except TelegramAPIError:
+            logger.debug("Failed to ack a throttled callback", exc_info=True)
+
     async def _notify(
         self, event: Message | CallbackQuery, user_id: int, now: float
     ) -> None:
         if now - self._last_notice.get(user_id, 0.0) <= self.notice_interval:
+            await self._silence(event)
             return
         self._last_notice[user_id] = now
         notice = "⏳ Слишком много запросов, подождите минуту."
@@ -81,7 +96,10 @@ class ThrottlingMiddleware(BaseMiddleware):
         last = self._last_seen.get(user_id)
         self._touch(user_id, now)
         if last is not None and now - last < self.min_interval:
-            return None  # silently drop machine-speed repeats
+            # drop machine-speed repeats, but still ack callbacks: an
+            # unanswered callback leaves the button spinner running
+            await self._silence(event)
+            return None
 
         if self._is_costly(event):
             timestamps = self._costly.setdefault(user_id, deque())

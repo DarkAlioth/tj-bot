@@ -110,3 +110,18 @@ async def test_non_costly_callback_not_quota_limited() -> None:
     for _ in range(5):
         cb = make_callback(9, "pg2:nx:hash:1")
         assert await middleware(handler, cast(TelegramObject, cb), data) == "ok"
+
+
+async def test_dropped_callback_still_acked() -> None:
+    """A throttled callback must be answered, or the client spins forever."""
+    middleware = ThrottlingMiddleware(min_interval=100)
+    handler = AsyncMock(return_value="ok")
+    data = make_data()
+
+    first = make_callback(4, "flt:cz:qh:ALL:se:010:c")
+    second = make_callback(4, "flt:cz:qh:ALL:se:010:c")
+
+    assert await middleware(handler, cast(TelegramObject, first), data) == "ok"
+    assert await middleware(handler, cast(TelegramObject, second), data) is None
+    assert handler.await_count == 1
+    second.answer.assert_awaited_once_with()

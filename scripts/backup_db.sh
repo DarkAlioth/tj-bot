@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Daily PostgreSQL backup for tj-bot. Intended for cron:
-#   0 4 * * * /home/sony/projects/TJ_BOT/scripts/backup_db.sh
+#   0 4 * * * /path/to/tj-bot/scripts/backup_db.sh
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/tj-bot}"

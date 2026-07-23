@@ -38,6 +38,7 @@ NO_CATEGORY = "-"
 CANCEL = "x"
 KIND_TORRENT = "t"
 KIND_MAGNET = "m"
+KIND_FAVORITE = "f"
 
 
 def _spawn_watcher(coro: Coroutine[object, object, None]) -> None:
@@ -95,7 +96,7 @@ async def _resolve_category(
     raise LookupError(token)
 
 
-async def _send_category_menu(
+async def send_category_menu(
     message: Message,
     qbit: QbittorrentClient,
     config: AppConfig,
@@ -228,7 +229,7 @@ async def send_to_server(
         return
 
     try:
-        await _send_category_menu(
+        await send_category_menu(
             message,
             qbit,
             config,
@@ -300,19 +301,32 @@ async def choose_category(
             await query.answer("qBittorrent недоступен", show_alert=True)
             return
     else:
-        torrent = await repo.get_torrent_by_hash(callback_data.hash)
-        if torrent is None:
-            await query.answer("Торрент устарел, повторите поиск", show_alert=True)
-            return
-        name = torrent.title
+        if callback_data.k == KIND_FAVORITE:
+            # int() guards the boundary: callback data can be forged by clients
+            try:
+                favorite_id = int(callback_data.hash)
+            except ValueError:
+                await query.answer()
+                return
+            favorite = await repo.get_favorite(query.from_user.id, favorite_id)
+            if favorite is None:
+                await query.answer("Записи больше нет в избранном", show_alert=True)
+                return
+            name, download_url = favorite.title, favorite.download_url
+        else:
+            torrent = await repo.get_torrent_by_hash(callback_data.hash)
+            if torrent is None:
+                await query.answer("Торрент устарел, повторите поиск", show_alert=True)
+                return
+            name, download_url = torrent.title, torrent.download_url
         try:
-            content = await jackett.download(torrent.download_url)
+            content = await jackett.download(download_url)
         except DownloadTooLargeError:
             await query.answer("Файл слишком большой", show_alert=True)
             return
         except JackettError:
             logger.exception(
-                "Failed to fetch torrent %s for server download", torrent.hash
+                "Failed to fetch %r for server download (%s)", name, callback_data.k
             )
             await query.answer("Не удалось получить файл с трекера", show_alert=True)
             return
@@ -321,7 +335,7 @@ async def choose_category(
                 content, safe_torrent_filename(name), tag=tag, category=category
             )
         except QbittorrentError:
-            logger.exception("Failed to add torrent %s to qBittorrent", torrent.hash)
+            logger.exception("Failed to add %r to qBittorrent", name)
             await query.answer("qBittorrent недоступен", show_alert=True)
             return
 
@@ -376,7 +390,7 @@ async def add_magnet(
     url = (message.text or "").strip()
     magnet_hash = await repo.save_magnet(url)
     try:
-        await _send_category_menu(
+        await send_category_menu(
             message,
             qbit,
             config,

@@ -7,10 +7,9 @@ from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
 
+from tj_bot.commands import set_bot_commands
 from tj_bot.config import (
     AppConfig,
     JackettRuntime,
@@ -81,35 +80,6 @@ def register_global_middlewares(
         observer.outer_middleware(throttling_middleware)
         observer.outer_middleware(database_middleware)
         observer.outer_middleware(access_middleware)
-
-
-USER_COMMANDS = [
-    BotCommand(command="s", description="🔎 Поиск торрентов"),
-    BotCommand(command="last", description="🔁 Повторить последний поиск"),
-    BotCommand(command="history", description="🕘 История поиска"),
-    BotCommand(command="favorites", description="⭐ Избранное"),
-]
-ADMIN_ONLY_COMMANDS = [
-    BotCommand(command="dl", description="🖥 Консоль qBittorrent"),
-    BotCommand(command="health", description="🩺 Состояние сервиса"),
-    BotCommand(command="stats", description="📊 Статистика"),
-    BotCommand(command="indexers", description="🧲 Индексеры Jackett"),
-    BotCommand(command="users", description="👥 Пользователи"),
-    BotCommand(command="broadcast", description="📢 Рассылка"),
-]
-
-
-async def set_bot_commands(bot: Bot, config: AppConfig) -> None:
-    """Publish the command menu: shared commands for all, extras for admins."""
-    try:
-        await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
-        for admin_id in config.admin_ids:
-            await bot.set_my_commands(
-                USER_COMMANDS + ADMIN_ONLY_COMMANDS,
-                scope=BotCommandScopeChat(chat_id=admin_id),
-            )
-    except TelegramAPIError:
-        logger.exception("Failed to publish bot commands")
 
 
 async def setup_qbittorrent(settings: Settings) -> QbittorrentClient | None:

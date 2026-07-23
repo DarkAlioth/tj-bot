@@ -2,12 +2,13 @@ import datetime
 import html
 import logging
 
-from aiogram import F, Router, types
+from aiogram import Bot, F, Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, Message
 
+from tj_bot.commands import set_user_commands
 from tj_bot.config import AppConfig
 from tj_bot.db.models import BotUser
 from tj_bot.db.repo import TorrentRepo
@@ -26,8 +27,15 @@ class Usr(CallbackData, prefix="usr"):
     uid: int
 
 
-def user_label(user: BotUser) -> str:
-    flag = "🚫" if user.blocked else ("⭐" if user.admin else "👤")
+def user_label(user: BotUser, config: AppConfig) -> str:
+    if user.blocked:
+        flag = "🚫"
+    elif config.is_super_admin(user.user_id):
+        flag = "👑"
+    elif user.admin:
+        flag = "⭐"
+    else:
+        flag = "👤"
     if user.username:
         name = f"@{user.username}"
     else:
@@ -81,14 +89,16 @@ def _btn(text: str, action: str, uid: int) -> types.InlineKeyboardButton:
     )
 
 
-async def build_user_list(repo: TorrentRepo) -> tuple[str, types.InlineKeyboardMarkup]:
+async def build_user_list(
+    repo: TorrentRepo, config: AppConfig
+) -> tuple[str, types.InlineKeyboardMarkup]:
     users = await repo.list_recent_users()
     if not users:
         return "Пользователей пока нет.", types.InlineKeyboardMarkup(inline_keyboard=[])
     rows = [
         [
             types.InlineKeyboardButton(
-                text=user_label(user),
+                text=user_label(user, config),
                 callback_data=Usr(a="card", uid=user.user_id).pack(),
             )
         ]
@@ -101,18 +111,20 @@ async def build_user_list(repo: TorrentRepo) -> tuple[str, types.InlineKeyboardM
 
 
 @users_router.message(Command("users"))
-async def list_users(message: Message, repo: TorrentRepo) -> None:
-    text, keyboard = await build_user_list(repo)
+async def list_users(message: Message, repo: TorrentRepo, config: AppConfig) -> None:
+    text, keyboard = await build_user_list(repo, config)
     await message.answer(padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
 
 @users_router.callback_query(Usr.filter(F.a == "list"))
-async def back_to_list(query: CallbackQuery, repo: TorrentRepo) -> None:
+async def back_to_list(
+    query: CallbackQuery, repo: TorrentRepo, config: AppConfig
+) -> None:
     message = query.message
     if not isinstance(message, Message):
         await query.answer()
         return
-    text, keyboard = await build_user_list(repo)
+    text, keyboard = await build_user_list(repo, config)
     await query.answer()
     await message.edit_text(
         padded(text), parse_mode=ParseMode.HTML, reply_markup=keyboard
@@ -156,7 +168,11 @@ async def toggle_block(
 
 @users_router.callback_query(Usr.filter(F.a.in_({"promote", "demote"})))
 async def toggle_admin(
-    query: CallbackQuery, callback_data: Usr, repo: TorrentRepo, config: AppConfig
+    query: CallbackQuery,
+    callback_data: Usr,
+    repo: TorrentRepo,
+    config: AppConfig,
+    bot: Bot,
 ) -> None:
     message = query.message
     if config.is_super_admin(callback_data.uid):
@@ -169,6 +185,8 @@ async def toggle_admin(
         config.dynamic_admins.add(callback_data.uid)
     else:
         config.dynamic_admins.discard(callback_data.uid)
+    # re-publish the command menu so the role change is visible immediately
+    await set_user_commands(bot, callback_data.uid, promote)
     await query.answer("Назначен админом" if promote else "Снят с админа")
     user = await repo.get_user(callback_data.uid)
     if user is not None and isinstance(message, Message):

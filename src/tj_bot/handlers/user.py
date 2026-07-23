@@ -565,7 +565,7 @@ def list_line(index: int, torrent: Torrent) -> str:
     published = torrent.published_at.strftime("%d.%m.%y")
     return (
         f'{index}. <a href="{torrent.details_url}">{html.escape(title)}</a>'
-        f" — {size_gb} GB · 🌱{torrent.seeders} · {published}"
+        f" — {size_gb} GB · {published}"
     )
 
 
@@ -628,11 +628,12 @@ async def render_list(
         nav.append(
             types.InlineKeyboardButton(text="⬅", callback_data=pg2("ls", page - 1))
         )
+    nav.append(types.InlineKeyboardButton(text="🔄", callback_data=Upd(qh=qh).pack()))
     if offset + len(torrents) < counter:
         nav.append(
             types.InlineKeyboardButton(text="➡", callback_data=pg2("ls", page + 1))
         )
-    rows = [top_row, *number_rows, nav] if nav else [top_row, *number_rows]
+    rows = [top_row, *number_rows, nav]
     await query.answer()
     await message.edit_text(
         padded("\n".join(lines)),

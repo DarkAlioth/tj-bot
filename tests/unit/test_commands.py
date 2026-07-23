@@ -6,8 +6,8 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendMessage
 from aiogram.types import BotCommandScopeChat, BotCommandScopeDefault
 
+from tj_bot.commands import ADMIN_ONLY_COMMANDS, USER_COMMANDS, set_bot_commands
 from tj_bot.config import AppConfig
-from tj_bot.main import ADMIN_ONLY_COMMANDS, USER_COMMANDS, set_bot_commands
 
 
 def make_config(admin_ids: list[int]) -> AppConfig:

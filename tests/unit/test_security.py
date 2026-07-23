@@ -26,7 +26,7 @@ def test_trusted_urls_allowed(url: str) -> None:
 @pytest.mark.parametrize(
     "url",
     [
-        "http://192.168.1.203:8181/api/v2/torrents/info",  # qBittorrent in LAN
+        "http://10.0.0.5:8181/api/v2/torrents/info",  # a LAN service
         "http://db:5432/",  # internal service
         "http://169.254.169.254/latest/meta-data/",  # cloud metadata
         "http://jackett:9118/dl",  # wrong port
@@ -42,7 +42,7 @@ def test_untrusted_urls_rejected(url: str) -> None:
 async def test_download_blocks_untrusted_before_any_request() -> None:
     client = make_client()
     with pytest.raises(UntrustedDownloadError):
-        await client.download("http://192.168.1.203:8181/secret")
+        await client.download("http://10.0.0.5:8181/secret")
 
 
 def test_parse_result_escapes_all_rendered_fields() -> None:

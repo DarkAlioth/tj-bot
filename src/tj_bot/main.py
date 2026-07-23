@@ -84,6 +84,7 @@ def register_global_middlewares(
 
 USER_COMMANDS = [
     BotCommand(command="s", description="🔎 Поиск торрентов"),
+    BotCommand(command="last", description="🔁 Повторить последний поиск"),
     BotCommand(command="history", description="🕘 История поиска"),
     BotCommand(command="favorites", description="⭐ Избранное"),
 ]

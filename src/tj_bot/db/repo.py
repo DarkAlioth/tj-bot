@@ -180,6 +180,17 @@ class TorrentRepo:
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def get_result_list(self, query_hash: str, limit: int) -> list[Torrent]:
+        """Top results of a cached search, best-seeded first."""
+        stmt = (
+            select(Torrent)
+            .select_from(Torrent, SearchQueryTorrent, SearchQuery)
+            .where(*self._results_filter(query_hash, None))
+            .order_by(*self.SORT_ORDERS["se"])
+            .limit(limit)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
     async def find_recent_search(
         self, query_text: str, max_age: datetime.timedelta
     ) -> SearchQuery | None:

@@ -169,6 +169,22 @@ async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None
     assert await repo.get_search("qh-old") is None
 
 
+async def test_get_result_list_orders_by_seeders(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    ids = await repo.upsert_torrents(
+        [
+            make_torrent("low", seeders=1),
+            make_torrent("top", seeders=99),
+            make_torrent("mid", seeders=50),
+        ]
+    )
+    await repo.create_search("qh-list", ids)
+
+    torrents = await repo.get_result_list("qh-list", limit=2)
+
+    assert [t.hash for t in torrents] == ["top", "mid"]
+
+
 async def test_active_user_ids_excludes_blocked(session: AsyncSession) -> None:
     repo = TorrentRepo(session)
     await repo.touch_user(9001, "alice", "Alice")

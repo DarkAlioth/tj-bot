@@ -1,9 +1,10 @@
 import datetime
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
-from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, select
+from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -455,8 +456,45 @@ class TorrentRepo:
         stmt = select(BotUser.user_id).where(BotUser.blocked.is_(False))
         return list((await self.session.execute(stmt)).scalars())
 
-    async def list_recent_users(self, limit: int = 15) -> list[BotUser]:
-        stmt = select(BotUser).order_by(BotUser.last_seen.desc()).limit(limit)
+    def _users_conditions(
+        self, group: str, super_ids: Sequence[int]
+    ) -> list[ColumnElement[bool]]:
+        """Filter for a /users group: "all", "admins" or "blocked".
+
+        Super-admins live in .env, not in the admin flag, so the admins group
+        matches either source.
+        """
+        if group == "admins":
+            admin_flag = BotUser.admin.is_(True)
+            if super_ids:
+                return [or_(admin_flag, BotUser.user_id.in_(super_ids))]
+            return [admin_flag]
+        if group == "blocked":
+            return [BotUser.blocked.is_(True)]
+        return []
+
+    async def count_users(
+        self, group: str = "all", super_ids: Sequence[int] = ()
+    ) -> int:
+        stmt = select(func.count(BotUser.user_id)).where(
+            *self._users_conditions(group, super_ids)
+        )
+        return (await self.session.execute(stmt)).scalar_one()
+
+    async def list_users_page(
+        self,
+        limit: int,
+        offset: int,
+        group: str = "all",
+        super_ids: Sequence[int] = (),
+    ) -> list[BotUser]:
+        stmt = (
+            select(BotUser)
+            .where(*self._users_conditions(group, super_ids))
+            .order_by(BotUser.last_seen.desc(), BotUser.user_id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
         return list((await self.session.execute(stmt)).scalars())
 
     async def set_blocked(self, user_id: int, blocked: bool) -> None:

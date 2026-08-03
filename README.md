@@ -34,7 +34,7 @@ A self-hosted Telegram bot for torrent search. It queries a private [Jackett](ht
 
 **Access & administration**
 - Open bot with guardrails: per-user rate limiting plus a quota on tracker-hitting actions; admins exempt
-- User management (`/users`): block/unblock, promote runtime admins, per-user search & download activity timeline
+- User management (`/users`): group tabs (all / admins / blocked) with pagination, block/unblock, promote runtime admins, per-user search & download activity timeline
 - `/health` — uptime, database size, disk space, qBittorrent summary, and Jackett indexer health in one message
 - `/broadcast` — draft-preview-confirm announcement to every active user
 - **Edge-triggered alerts** — admins get notified when an indexer goes down (and when it recovers), when Jackett is unreachable, or when the qBittorrent disk runs low; deploy restarts stay silent
@@ -120,7 +120,7 @@ All settings come from `.env` (never committed):
 | `/health`     | admin | Service overview in one message                |
 | `/stats`      | admin | Cache totals, weekly activity, top queries     |
 | `/indexers`   | admin | Jackett indexer health                         |
-| `/users`      | admin | Block/unblock, promote admins, activity        |
+| `/users`      | admin | Grouped, paginated list; block/promote; activity |
 | `/broadcast`  | admin | Announcement to all active users               |
 
 ## Development

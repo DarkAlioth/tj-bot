@@ -16,6 +16,7 @@ from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
 from tj_bot.handlers.user import Dlt, category_token
 from tj_bot.services.download_watcher import watch_download
+from tj_bot.services.feedback import ack_silent, alert_or_message
 from tj_bot.services.formatting import DOWNLOADING_STATES, format_size, padded
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
@@ -294,11 +295,12 @@ async def choose_category(
             )
             return
         name = magnet_name(url)
+        await repo.commit()
         try:
             await qbit.add_torrent_url(url, tag=tag, category=category)
         except QbittorrentError:
             logger.exception("Failed to add magnet to qBittorrent")
-            await query.answer("qBittorrent недоступен", show_alert=True)
+            await alert_or_message(query, "qBittorrent недоступен")
             return
     else:
         if callback_data.k == KIND_FAVORITE:
@@ -319,16 +321,20 @@ async def choose_category(
                 await query.answer("Торрент устарел, повторите поиск", show_alert=True)
                 return
             name, download_url = torrent.title, torrent.download_url
+        # release the per-update transaction before the slow tracker and
+        # qBittorrent calls; feedback goes through alert_or_message because
+        # the callback may expire while they run
+        await repo.commit()
         try:
             content = await jackett.download(download_url)
         except DownloadTooLargeError:
-            await query.answer("Файл слишком большой", show_alert=True)
+            await alert_or_message(query, "Файл слишком большой")
             return
         except JackettError:
             logger.exception(
                 "Failed to fetch %r for server download (%s)", name, callback_data.k
             )
-            await query.answer("Не удалось получить файл с трекера", show_alert=True)
+            await alert_or_message(query, "Не удалось получить файл с трекера")
             return
         try:
             await qbit.add_torrent_file(
@@ -336,11 +342,11 @@ async def choose_category(
             )
         except QbittorrentError:
             logger.exception("Failed to add %r to qBittorrent", name)
-            await query.answer("qBittorrent недоступен", show_alert=True)
+            await alert_or_message(query, "qBittorrent недоступен")
             return
 
     await repo.record_download(query.from_user.id, name, "server")
-    await query.answer("Добавлено в загрузки ⬇️")
+    await ack_silent(query, "Добавлено в загрузки ⬇️")
     await _start_progress(bot, qbit, message, tag, name, config)
 
 

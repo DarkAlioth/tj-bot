@@ -34,6 +34,22 @@ async def test_tracks_user_and_passes() -> None:
 
     assert result == "ok"
     repo.touch_user.assert_awaited_once_with(1, "u", "Full Name")
+    repo.commit.assert_awaited_once()
+
+
+async def test_commits_before_handler_runs() -> None:
+    """The bot_users row lock must be released before slow handler work."""
+    order: list[str] = []
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.is_blocked.return_value = False
+    repo.commit.side_effect = lambda: order.append("commit")
+    handler = AsyncMock(side_effect=lambda *_: order.append("handler"))
+
+    await AccessMiddleware()(
+        handler, cast(TelegramObject, make_event(1)), make_data(repo)
+    )
+
+    assert order == ["commit", "handler"]
 
 
 async def test_blocked_user_dropped() -> None:

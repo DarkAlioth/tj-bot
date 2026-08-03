@@ -19,6 +19,7 @@ from tj_bot.db.filters import (
 )
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.services.feedback import ack_silent, alert_or_message
 from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
@@ -291,6 +292,10 @@ async def run_search(
             )
             return
 
+    # the tracker round-trip can take up to jackett_timeout_seconds — release
+    # the per-update transaction so it does not pin a pool connection and the
+    # user's bot_users row lock for the whole wait
+    await repo.commit()
     try:
         items = await jackett.search(raw_query)
     except JackettError:
@@ -439,21 +444,22 @@ async def hash_callback(
     if torrent is None or not isinstance(message, Message):
         await query.answer()
         return
+    await repo.commit()
     filename = safe_torrent_filename(torrent.title)
     try:
         content = await jackett.download(torrent.download_url)
     except DownloadTooLargeError:
-        await message.answer(padded("Файл с трекера слишком большой."))
+        await alert_or_message(query, "Файл с трекера слишком большой.")
     except JackettError:
         logger.exception("Download failed for %s", torrent.hash)
-        await message.answer(padded("Не удалось скачать файл с трекера."))
+        await alert_or_message(query, "Не удалось скачать файл с трекера.")
     else:
         await message.answer_document(
             BufferedInputFile(file=content, filename=filename)
         )
         if query.from_user is not None:
             await repo.record_download(query.from_user.id, torrent.title, "chat")
-    await query.answer()
+        await ack_silent(query)
 
 
 async def render_page(

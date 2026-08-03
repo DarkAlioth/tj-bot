@@ -13,6 +13,7 @@ from tj_bot.db.models import Favorite
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers.admin import KIND_FAVORITE, send_category_menu
 from tj_bot.handlers.user import FAV_SAVE_LABEL, FAV_SAVED_LABEL, Dlt
+from tj_bot.services.feedback import ack_silent, alert_or_message
 from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import (
     DownloadTooLargeError,
@@ -243,14 +244,15 @@ async def download_favorite(
     if favorite is None or not isinstance(message, Message):
         await query.answer(GONE_TEXT, show_alert=True)
         return
+    await repo.commit()
     try:
         content = await jackett.download(favorite.download_url)
     except DownloadTooLargeError:
-        await message.answer(padded("Файл с трекера слишком большой."))
+        await alert_or_message(query, "Файл с трекера слишком большой.")
     except JackettError:
         logger.exception("Favorite download failed for %s", favorite.id)
-        await message.answer(
-            padded("Не удалось скачать — ссылка могла устареть, найдите заново.")
+        await alert_or_message(
+            query, "Не удалось скачать — ссылка могла устареть, найдите заново."
         )
     else:
         await message.answer_document(
@@ -259,7 +261,7 @@ async def download_favorite(
             )
         )
         await repo.record_download(query.from_user.id, favorite.title, "chat")
-    await query.answer()
+        await ack_silent(query)
 
 
 @favorites_router.callback_query(Fav.filter(F.a == "sv"))

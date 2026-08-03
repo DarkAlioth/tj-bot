@@ -95,6 +95,33 @@ async def test_search_renders_first_result_card() -> None:
     assert "Title" in card_text
 
 
+async def test_search_releases_db_before_tracker_roundtrip() -> None:
+    """run_search must commit (drop locks/connection) before hitting Jackett."""
+    order: list[str] = []
+    message = AsyncMock()
+    sent = AsyncMock()
+    message.answer.return_value = sent
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.find_recent_search.return_value = None
+    repo.upsert_torrents.return_value = [1]
+    repo.create_search.return_value = 1
+    repo.get_result_page.return_value = make_torrent_model()
+    repo.commit.side_effect = lambda: order.append("commit")
+    jackett = AsyncMock(spec=JackettClient)
+
+    def record_search(_query: str) -> list[TorrentData]:
+        order.append("search")
+        return [make_item()]
+
+    jackett.search.side_effect = record_search
+
+    await srch_torrent(
+        cast(Message, message), repo, jackett, make_config(), make_command("ubuntu")
+    )
+
+    assert order == ["commit", "search"]
+
+
 async def test_search_failure_reports_to_user() -> None:
     message = AsyncMock()
     sent = AsyncMock()

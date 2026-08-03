@@ -189,6 +189,14 @@ class QbittorrentClient:
         )
         return self._parse_json_list(body)
 
+    async def add_tags(self, hashes: str, tag: str) -> None:
+        """Attach a tag to existing torrents ('h1|h2' or 'all')."""
+        await self._request(
+            "POST",
+            "/api/v2/torrents/addTags",
+            data={"hashes": hashes, "tags": tag},
+        )
+
     async def torrent_files(self, torrent_hash: str) -> list[dict[str, Any]]:
         """Files inside a torrent; empty until a magnet's metadata arrives."""
         body = await self._request(

@@ -7,6 +7,7 @@ and the picker keeps working across bot restarts and redeploys.
 """
 
 import asyncio
+import hashlib
 import html
 import logging
 import re
@@ -46,7 +47,11 @@ FILE_PAGE_SIZE = 8
 # stop condition and force-stopped once the file list appears
 STOP_AFTER_METADATA = "MetadataReceived"
 METADATA_TIMEOUT_SECONDS = 90
-METADATA_POLL_SECONDS = 2.0
+METADATA_POLL_SECONDS = 0.5
+# /torrents/add returns before the torrent is registered in the session, so
+# a freshly added .torrent may be invisible for a moment
+ADD_VISIBLE_TIMEOUT_SECONDS = 15
+MAX_FILE_NAME_CHARS = 128
 TAG_PREFIX = "tjbot-"
 
 QBIT_DOWN_TEXT = "qBittorrent недоступен"
@@ -96,10 +101,53 @@ def tag_of(info: dict[str, Any]) -> str | None:
 
 
 def file_display_name(path: str) -> str:
+    """Basename, shortened only when extreme — episode tokens must stay visible."""
     name = html.unescape(path).rsplit("/", 1)[-1]
-    if len(name) > 40:
-        name = name[:19] + "…" + name[-20:]
+    if len(name) > MAX_FILE_NAME_CHARS:
+        # keep a long head and the tail: quality/extension live at the end
+        name = name[:95] + "…" + name[-32:]
     return name
+
+
+def _bencode_end(data: bytes, start: int) -> int:
+    """End offset of the bencoded value starting at ``start``."""
+    lead = data[start : start + 1]
+    if lead == b"i":
+        return data.index(b"e", start) + 1
+    if lead in (b"l", b"d"):
+        offset = start + 1
+        while data[offset : offset + 1] != b"e":
+            offset = _bencode_end(data, offset)
+        return offset + 1
+    colon = data.index(b":", start)
+    return colon + 1 + int(data[start:colon])
+
+
+def torrent_infohash(content: bytes) -> str | None:
+    """v1 infohash of a .torrent file, or None when it cannot be parsed.
+
+    BitTorrent defines the infohash as SHA-1 of the bencoded ``info`` dict —
+    it is an identifier here, not a security primitive.
+    """
+    try:
+        if content[:1] != b"d":
+            return None
+        offset = 1
+        while content[offset : offset + 1] != b"e":
+            colon = content.index(b":", offset)
+            key_len = int(content[offset:colon])
+            key = content[colon + 1 : colon + 1 + key_len]
+            value_start = colon + 1 + key_len
+            value_end = _bencode_end(content, value_start)
+            if key == b"info":
+                digest = hashlib.sha1(  # noqa: S324  # protocol-mandated id
+                    content[value_start:value_end], usedforsecurity=False
+                )
+                return digest.hexdigest()
+            offset = value_end
+    except (ValueError, IndexError):
+        return None
+    return None
 
 
 def build_selection_view(
@@ -245,25 +293,42 @@ async def begin_torrent_send(
         await alert_or_message(query, "Не удалось получить файл с трекера")
         return
     tag = new_tag()
-    try:
-        await qbit.add_torrent_file(
-            content,
-            safe_torrent_filename(name),
-            tag=tag,
-            category=config.settings.qbit_category,
-            paused=True,
-        )
-        torrents = await qbit.torrents_by_tag(tag)
-    except QbittorrentError:
-        logger.exception("Failed to add %r to qBittorrent", name)
-        await alert_or_message(query, QBIT_DOWN_TEXT)
-        return
-    if not torrents or not torrents[0].get("hash"):
-        await alert_or_message(query, "qBittorrent не принял торрент")
-        return
-    await ack_silent(query)
+    torrent_hash: str | None = None
+    known_hash = torrent_infohash(content)
+    if known_hash is not None:
+        try:
+            if await qbit.torrent_info(known_hash) is not None:
+                torrent_hash = known_hash
+        except QbittorrentError:
+            torrent_hash = None  # the add below reports the proper error
+    if torrent_hash is not None:
+        # re-adding an existing torrent is a silent no-op in qBittorrent, so
+        # open the picker for the one that is already there
+        try:
+            await qbit.add_tags(torrent_hash, tag)
+        except QbittorrentError:
+            logger.debug("Tagging the existing torrent failed", exc_info=True)
+        await ack_silent(query, "Уже в qBittorrent — открываю файлы")
+    else:
+        try:
+            await qbit.add_torrent_file(
+                content,
+                safe_torrent_filename(name),
+                tag=tag,
+                category=config.settings.qbit_category,
+                paused=True,
+            )
+        except QbittorrentError:
+            logger.exception("Failed to add %r to qBittorrent", name)
+            await alert_or_message(query, QBIT_DOWN_TEXT)
+            return
+        torrent_hash = await _wait_for_metadata(qbit, tag, ADD_VISIBLE_TIMEOUT_SECONDS)
+        if torrent_hash is None:
+            await alert_or_message(query, "qBittorrent не принял торрент")
+            return
+        await ack_silent(query)
     status = await message.answer(padded("Загружаю список файлов…"))
-    await render_selection(status, qbit, str(torrents[0]["hash"]), page=0)
+    await render_selection(status, qbit, torrent_hash, page=0)
 
 
 async def begin_magnet_send(
@@ -290,7 +355,8 @@ async def begin_magnet_send(
     status = await message.answer(
         padded(f"🧲 <b>{html.escape(magnet_name(url))}</b>\n⠀\nПолучаю метаданные…")
     )
-    torrent_hash = await _wait_for_metadata(qbit, tag)
+    # the module constant is read at call time so tests can shrink it
+    torrent_hash = await _wait_for_metadata(qbit, tag, METADATA_TIMEOUT_SECONDS)
     if torrent_hash is None:
         await _safe_edit(
             status,
@@ -305,11 +371,16 @@ async def begin_magnet_send(
     await render_selection(status, qbit, torrent_hash, page=0)
 
 
-async def _wait_for_metadata(qbit: QbittorrentClient, tag: str) -> str | None:
-    """The magnet's torrent hash once its file list exists, None on timeout."""
+async def _wait_for_metadata(
+    qbit: QbittorrentClient, tag: str, timeout_seconds: float
+) -> str | None:
+    """The torrent's hash once it is listed and its file list exists.
+
+    None on timeout; a half-added torrent is deleted so a retry starts clean.
+    """
     torrent_hash: str | None = None
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + METADATA_TIMEOUT_SECONDS
+    deadline = loop.time() + timeout_seconds
     while loop.time() < deadline:
         try:
             if torrent_hash is None:

@@ -14,9 +14,11 @@ from tj_bot.handlers.server_download import (
     begin_torrent_send,
     build_selection_view,
     cancel_download,
+    file_display_name,
     select_all_files,
     start_download,
     toggle_file,
+    torrent_infohash,
 )
 from tj_bot.services.jackett import JackettClient, JackettError
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
@@ -314,3 +316,107 @@ async def test_render_reports_qbit_down() -> None:
     await toggle_file(query, fs("t"), qbit, make_config())
 
     assert query.answer.await_args.kwargs.get("show_alert") is True
+
+
+INFO_DICT = b"d3:foo3:bare"
+VALID_TORRENT = b"d8:announce7:http://4:info" + INFO_DICT + b"e"
+
+
+def test_torrent_infohash_is_sha1_of_info_dict() -> None:
+    import hashlib
+
+    expected = hashlib.sha1(INFO_DICT, usedforsecurity=False).hexdigest()
+
+    assert torrent_infohash(VALID_TORRENT) == expected
+    assert torrent_infohash(b"torrentbytes") is None
+    assert torrent_infohash(b"") is None
+
+
+def test_file_display_name_keeps_episode_tokens() -> None:
+    long_name = "Series.Name." + "x" * 60 + ".S02E07." + "y" * 60 + ".1080p.mkv"
+
+    shown = file_display_name("Season 2/" + long_name)
+
+    assert "S02E07" in shown
+    assert len(shown) <= 128
+    # short names are untouched
+    assert file_display_name("dir/file.mkv") == "file.mkv"
+
+
+async def test_begin_torrent_send_waits_out_add_race(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """/torrents/add returns before the torrent is listed; the picker waits."""
+    monkeypatch.setattr("tj_bot.handlers.server_download.METADATA_POLL_SECONDS", 0)
+    query = make_query()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.return_value = b"torrentbytes"  # not bencode: no dup path
+    qbit = make_qbit()
+    qbit.torrents_by_tag.side_effect = [[], [], [{"hash": HASH}]]
+
+    await begin_torrent_send(
+        query,
+        cast(Message, query.message),
+        AsyncMock(spec=TorrentRepo),
+        jackett,
+        qbit,
+        make_config(),
+        "Movie",
+        "http://jackett:9117/dl/1",
+    )
+
+    status = query.message.answer.return_value
+    assert "Выбрано" in status.edit_text.await_args.args[0]
+
+
+async def test_begin_torrent_send_reuses_existing_torrent() -> None:
+    """Re-sending an already added torrent opens the picker instead of failing."""
+    query = make_query()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.return_value = VALID_TORRENT
+    qbit = make_qbit()
+
+    await begin_torrent_send(
+        query,
+        cast(Message, query.message),
+        AsyncMock(spec=TorrentRepo),
+        jackett,
+        qbit,
+        make_config(),
+        "Movie",
+        "http://jackett:9117/dl/1",
+    )
+
+    qbit.add_torrent_file.assert_not_awaited()
+    qbit.add_tags.assert_awaited_once()
+    assert "Уже в qBittorrent" in query.answer.await_args.args[0]
+    status = query.message.answer.return_value
+    assert "Выбрано" in status.edit_text.await_args.args[0]
+
+
+async def test_begin_torrent_send_reports_never_listed_torrent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("tj_bot.handlers.server_download.METADATA_POLL_SECONDS", 0)
+    monkeypatch.setattr(
+        "tj_bot.handlers.server_download.ADD_VISIBLE_TIMEOUT_SECONDS", 0.05
+    )
+    query = make_query()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.return_value = b"torrentbytes"
+    qbit = make_qbit()
+    qbit.torrents_by_tag.return_value = []
+    qbit.torrent_info.return_value = None
+
+    await begin_torrent_send(
+        query,
+        cast(Message, query.message),
+        AsyncMock(spec=TorrentRepo),
+        jackett,
+        qbit,
+        make_config(),
+        "Movie",
+        "http://jackett:9117/dl/1",
+    )
+
+    assert "не принял" in query.answer.await_args.args[0]

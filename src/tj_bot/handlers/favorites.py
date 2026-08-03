@@ -11,7 +11,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from tj_bot.config import AppConfig
 from tj_bot.db.models import Favorite
 from tj_bot.db.repo import TorrentRepo
-from tj_bot.handlers.admin import KIND_FAVORITE, send_category_menu
+from tj_bot.handlers.server_download import begin_torrent_send
 from tj_bot.handlers.user import FAV_SAVE_LABEL, FAV_SAVED_LABEL, Dlt
 from tj_bot.services.feedback import ack_silent, alert_or_message
 from tj_bot.services.formatting import padded
@@ -21,7 +21,7 @@ from tj_bot.services.jackett import (
     JackettError,
     safe_torrent_filename,
 )
-from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
+from tj_bot.services.qbittorrent import QbittorrentClient
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +269,7 @@ async def favorite_to_server(
     query: CallbackQuery,
     callback_data: Fav,
     repo: TorrentRepo,
+    jackett: JackettClient,
     qbit: QbittorrentClient | None,
     config: AppConfig,
 ) -> None:
@@ -283,21 +284,16 @@ async def favorite_to_server(
     if favorite is None:
         await query.answer(GONE_TEXT, show_alert=True)
         return
-    try:
-        await send_category_menu(
-            message,
-            qbit,
-            config,
-            kind=KIND_FAVORITE,
-            item_hash=str(favorite.id),
-            name=favorite.title,
-            size=favorite.size,
-        )
-    except QbittorrentError:
-        logger.exception("Failed to load qBittorrent categories")
-        await query.answer("qBittorrent недоступен", show_alert=True)
-        return
-    await query.answer()
+    await begin_torrent_send(
+        query,
+        message,
+        repo,
+        jackett,
+        qbit,
+        config,
+        favorite.title,
+        favorite.download_url,
+    )
 
 
 @favorites_router.callback_query(Fav.filter(F.a == "rm"))

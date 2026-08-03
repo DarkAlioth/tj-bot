@@ -5,6 +5,7 @@ from tj_bot.handlers.errors import errors_router
 from tj_bot.handlers.favorites import favorites_router
 from tj_bot.handlers.inline import inline_router
 from tj_bot.handlers.qbit_console import qbit_router
+from tj_bot.handlers.server_download import server_download_router
 from tj_bot.handlers.user import user_router
 from tj_bot.handlers.users import users_router
 
@@ -14,6 +15,7 @@ routers_list = [
     admin_info_router,
     users_router,
     admin_router,
+    server_download_router,
     favorites_router,
     user_router,
     inline_router,

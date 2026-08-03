@@ -276,3 +276,45 @@ async def test_add_torrent_url_sends_urls_field(
     assert captured["tags"] == "t1"
     assert captured["category"] == "c"
     assert captured["stopped"] == "true"
+
+
+async def test_add_torrent_url_sends_stop_condition(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def add(request: web.Request) -> web.Response:
+        form = await request.post()
+        captured.update(form)
+        return web.Response(text="Ok.")
+
+    client = await qbit_env(login_app(torrents__add=add))
+    await client.add_torrent_url(
+        "magnet:?xt=urn:btih:abc", tag="t1", stop_condition="MetadataReceived"
+    )
+
+    assert captured["stopCondition"] == "MetadataReceived"
+
+
+async def test_torrent_files_lists_and_priorities(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    async def files(request: web.Request) -> web.Response:
+        assert request.query["hash"] == "h1"  # noqa: S101
+        return web.json_response(
+            [{"index": 0, "name": "a.mkv", "size": 10, "priority": 1}]
+        )
+
+    captured: dict[str, Any] = {}
+
+    async def prio(request: web.Request) -> web.Response:
+        captured.update(await request.post())
+        return web.Response(text="")
+
+    client = await qbit_env(login_app(torrents__files=files, torrents__filePrio=prio))
+
+    listed = await client.torrent_files("h1")
+    await client.set_file_priority("h1", "0|2", 0)
+
+    assert listed[0]["name"] == "a.mkv"
+    assert captured == {"hash": "h1", "id": "0|2", "priority": "0"}

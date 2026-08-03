@@ -318,3 +318,18 @@ async def test_torrent_files_lists_and_priorities(
 
     assert listed[0]["name"] == "a.mkv"
     assert captured == {"hash": "h1", "id": "0|2", "priority": "0"}
+
+
+async def test_add_tags_posts_hashes_and_tag(
+    qbit_env: Callable[[web.Application], Awaitable[QbittorrentClient]],
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def add_tags(request: web.Request) -> web.Response:
+        captured.update(await request.post())
+        return web.Response(text="")
+
+    client = await qbit_env(login_app(torrents__addTags=add_tags))
+    await client.add_tags("h1|h2", "tjbot-x")
+
+    assert captured == {"hashes": "h1|h2", "tags": "tjbot-x"}

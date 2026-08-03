@@ -7,7 +7,15 @@ from aiogram.types import CallbackQuery, Message
 from tj_bot.config import AppConfig
 from tj_bot.db.models import BotUser
 from tj_bot.db.repo import TorrentRepo
-from tj_bot.handlers.users import Usr, show_user, toggle_admin, toggle_block
+from tj_bot.handlers.users import (
+    Us2,
+    Usr,
+    UsrL,
+    build_user_list,
+    legacy_user_action,
+    user_action,
+    users_page,
+)
 
 
 def make_user(uid: int = 100, blocked: bool = False, admin: bool = False) -> BotUser:
@@ -25,6 +33,7 @@ def make_user(uid: int = 100, blocked: bool = False, admin: bool = False) -> Bot
 def make_config(super_admins: set[int]) -> AppConfig:
     config = MagicMock()
     config.is_super_admin = lambda uid: uid in super_admins
+    config.super_admins = sorted(super_admins)
     config.dynamic_admins = set()
     return cast(AppConfig, config)
 
@@ -38,12 +47,20 @@ def make_query() -> AsyncMock:
     return query
 
 
+def make_bot() -> AsyncMock:
+    return AsyncMock()
+
+
+def card(uid: int, action: str = "card") -> Us2:
+    return Us2(a=action, uid=uid, g="a", p=0)
+
+
 async def test_show_user_card_has_actions() -> None:
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_user.return_value = make_user()
 
-    await show_user(query, Usr(a="card", uid=100), repo, make_config(set()))
+    await user_action(query, card(100), repo, make_config(set()), make_bot())
 
     kb = query.message.edit_text.await_args.kwargs["reply_markup"]
     labels = [b.text for r in kb.inline_keyboard for b in r]
@@ -51,12 +68,29 @@ async def test_show_user_card_has_actions() -> None:
     assert "⭐ В админы" in labels
 
 
+async def test_card_keeps_list_position_in_callbacks() -> None:
+    query = make_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_user.return_value = make_user()
+
+    await user_action(
+        query, Us2(a="card", uid=100, g="b", p=2), repo, make_config(set()), make_bot()
+    )
+
+    kb = query.message.edit_text.await_args.kwargs["reply_markup"]
+    callbacks = [b.callback_data for r in kb.inline_keyboard for b in r]
+    # actions carry the origin group/page; the back button returns to it
+    assert Us2(a="block", uid=100, g="b", p=2).pack() in callbacks
+    assert UsrL(g="b", p=2).pack() in callbacks
+    assert all(len(data.encode()) <= 64 for data in callbacks)
+
+
 async def test_super_admin_has_no_management_buttons() -> None:
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_user.return_value = make_user(uid=5)
 
-    await show_user(query, Usr(a="card", uid=5), repo, make_config({5}))
+    await user_action(query, card(5), repo, make_config({5}), make_bot())
 
     kb = query.message.edit_text.await_args.kwargs["reply_markup"]
     labels = [b.text for r in kb.inline_keyboard for b in r]
@@ -68,7 +102,7 @@ async def test_block_toggles_and_refreshes() -> None:
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_user.return_value = make_user(blocked=True)
 
-    await toggle_block(query, Usr(a="block", uid=100), repo, make_config(set()))
+    await user_action(query, card(100, "block"), repo, make_config(set()), make_bot())
 
     repo.set_blocked.assert_awaited_once_with(100, True)
 
@@ -77,7 +111,7 @@ async def test_cannot_block_super_admin() -> None:
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
 
-    await toggle_block(query, Usr(a="block", uid=5), repo, make_config({5}))
+    await user_action(query, card(5, "block"), repo, make_config({5}), make_bot())
 
     repo.set_blocked.assert_not_awaited()
     assert query.answer.await_args.kwargs.get("show_alert") is True
@@ -89,8 +123,8 @@ async def test_promote_updates_db_and_live_set() -> None:
     repo.get_user.return_value = make_user(admin=True)
     config = make_config(set())
 
-    bot = AsyncMock()
-    await toggle_admin(query, Usr(a="promote", uid=100), repo, config, bot)
+    bot = make_bot()
+    await user_action(query, card(100, "promote"), repo, config, bot)
 
     repo.set_admin.assert_awaited_once_with(100, True)
     assert 100 in config.dynamic_admins
@@ -111,8 +145,8 @@ async def test_demote_removes_from_live_set() -> None:
     config = make_config(set())
     config.dynamic_admins.add(100)
 
-    bot = AsyncMock()
-    await toggle_admin(query, Usr(a="demote", uid=100), repo, config, bot)
+    bot = make_bot()
+    await user_action(query, card(100, "demote"), repo, config, bot)
 
     repo.set_admin.assert_awaited_once_with(100, False)
     assert 100 not in config.dynamic_admins
@@ -126,10 +160,6 @@ async def test_demote_removes_from_live_set() -> None:
 
 
 async def test_activity_view_lists_searches_and_downloads() -> None:
-    import datetime
-
-    from tj_bot.handlers.users import show_activity
-
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
     repo.user_activity_counts.return_value = (3, 2)
@@ -137,7 +167,9 @@ async def test_activity_view_lists_searches_and_downloads() -> None:
     repo.get_user_searches.return_value = [("ubuntu", when)]
     repo.get_user_downloads.return_value = [("Movie", "server", when)]
 
-    await show_activity(query, Usr(a="activity", uid=100), repo)
+    await user_action(
+        query, card(100, "activity"), repo, make_config(set()), make_bot()
+    )
 
     text = query.message.edit_text.await_args.args[0]
     assert "поисков: 3" in text and "скачиваний: 2" in text
@@ -153,3 +185,85 @@ def test_user_label_flags_super_admin_with_crown() -> None:
     assert user_label(make_user(uid=101, admin=True), config).startswith("⭐")
     assert user_label(make_user(uid=102), config).startswith("👤")
     assert user_label(make_user(uid=103, blocked=True), config).startswith("🚫")
+
+
+async def test_user_list_shows_tabs_and_user_buttons() -> None:
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.count_users.return_value = 2
+    repo.list_users_page.return_value = [make_user(100), make_user(101)]
+
+    text, kb = await build_user_list(repo, make_config(set()), "a", 0)
+
+    assert "все: 2" in text
+    tab_row = [b.text for b in kb.inline_keyboard[0]]
+    assert tab_row == ["• 👥 Все", "⭐ Админы", "🚫 Блок"]
+    repo.list_users_page.assert_awaited_once_with(10, 0, "all", [])
+    user_callbacks = [b.callback_data for b in (r[0] for r in kb.inline_keyboard[1:])]
+    assert Us2(a="card", uid=100, g="a", p=0).pack() in user_callbacks
+    # a two-user list fits one page: no nav row
+    assert len(kb.inline_keyboard) == 3
+
+
+async def test_user_list_pagination_nav() -> None:
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.count_users.return_value = 25
+    repo.list_users_page.return_value = [make_user(100)]
+
+    _, kb = await build_user_list(repo, make_config(set()), "a", 1)
+
+    nav = [b.text for b in kb.inline_keyboard[-1]]
+    assert nav == ["⬅", "2/3", "➡"]
+    repo.list_users_page.assert_awaited_once_with(10, 10, "all", [])
+
+
+async def test_user_list_clamps_page_overflow() -> None:
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.count_users.return_value = 25
+    repo.list_users_page.return_value = [make_user(100)]
+
+    await build_user_list(repo, make_config(set()), "a", 99)
+
+    # 25 users -> 3 pages -> the last page offset is 20
+    repo.list_users_page.assert_awaited_once_with(10, 20, "all", [])
+
+
+async def test_user_list_blocked_group_queries_blocked() -> None:
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.count_users.return_value = 0
+    repo.list_users_page.return_value = []
+
+    text, kb = await build_user_list(repo, make_config({5}), "b", 0)
+
+    assert "никого нет" in text
+    repo.count_users.assert_awaited_once_with("blocked", [5])
+    tab_row = [b.text for b in kb.inline_keyboard[0]]
+    assert "• 🚫 Блок" in tab_row
+
+
+async def test_users_page_renders_in_place() -> None:
+    query = make_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.count_users.return_value = 1
+    repo.list_users_page.return_value = [make_user(100)]
+
+    await users_page(query, UsrL(g="m", p=0), repo, make_config(set()))
+
+    query.message.edit_text.assert_awaited_once()
+    assert "админы: 1" in query.message.edit_text.await_args.args[0]
+
+
+async def test_legacy_usr_buttons_still_work() -> None:
+    query = make_query()
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.get_user.return_value = make_user()
+    repo.count_users.return_value = 1
+    repo.list_users_page.return_value = [make_user(100)]
+    config = make_config(set())
+    bot = make_bot()
+
+    await legacy_user_action(query, Usr(a="card", uid=100), repo, config, bot)
+    assert query.message.edit_text.await_count == 1
+
+    await legacy_user_action(query, Usr(a="list", uid=0), repo, config, bot)
+    assert query.message.edit_text.await_count == 2
+    assert "все: 1" in query.message.edit_text.await_args.args[0]

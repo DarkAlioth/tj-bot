@@ -410,8 +410,26 @@ async def test_user_access_lifecycle(session: AsyncSession) -> None:
     assert await repo.admin_user_ids() == [100]
 
     await repo.touch_user(200, "bob", "Bob")
-    recent = await repo.list_recent_users()
-    assert {u.user_id for u in recent} == {100, 200}
+    await repo.set_blocked(200, True)
+
+    everyone = {u.user_id for u in await repo.list_users_page(50, 0)}
+    assert {100, 200} <= everyone
+
+    blocked = {u.user_id for u in await repo.list_users_page(50, 0, "blocked")}
+    assert 200 in blocked
+    assert 100 not in blocked
+    assert await repo.count_users("blocked") >= 1
+
+    # the admin flag and an .env super-admin id both land in the admins group
+    admins = {u.user_id for u in await repo.list_users_page(50, 0, "admins", [200])}
+    assert {100, 200} <= admins
+    admins_flag_only = {u.user_id for u in await repo.list_users_page(50, 0, "admins")}
+    assert 200 not in admins_flag_only
+
+    # newest-first ordering and offset paging hold together
+    first = await repo.list_users_page(1, 0)
+    second = await repo.list_users_page(1, 1)
+    assert first[0].user_id != second[0].user_id
 
 
 async def test_download_events_and_activity(session: AsyncSession) -> None:

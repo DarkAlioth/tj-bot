@@ -41,6 +41,9 @@ class Settings(BaseSettings):
 
     # Admin alerts: indexer down / low disk space (0 disables the monitor)
     alert_check_interval_seconds: int = 1800
+    # while something is broken, re-test only the affected indexers this
+    # often (0 falls back to the base interval)
+    alert_recheck_interval_seconds: int = 300
     alert_free_space_gb: int = 10
 
     @property

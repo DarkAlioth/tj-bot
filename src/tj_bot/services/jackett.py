@@ -26,6 +26,9 @@ RETRY_DELAY_SECONDS = 2.0
 DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]", flags=re.UNICODE)
+# Jackett indexer ids are ASCII slugs; a leading alphanumeric also rules out
+# ".." path segments (yarl decodes %2F back, so quoting cannot be trusted)
+_INDEXER_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 def safe_torrent_filename(title: str) -> str:
@@ -134,6 +137,7 @@ class JackettClient:
         self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         self._download_max_bytes = download_max_bytes
         self._session: aiohttp.ClientSession | None = None
+        self._observed_errors: dict[str, str] = {}
 
     def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -199,12 +203,30 @@ class JackettClient:
         msg = f"Jackett {what} failed after retry"
         raise JackettError(msg)
 
+    def observed_errors(self) -> dict[str, str]:
+        """Indexer failures noticed during real searches: id -> display name."""
+        return dict(self._observed_errors)
+
+    def take_observed_errors(self) -> dict[str, str]:
+        """Consume the observed failures (the monitor picks them up once)."""
+        observed, self._observed_errors = self._observed_errors, {}
+        return observed
+
+    def _record_observed_errors(self, payload: dict[str, Any]) -> None:
+        for indexer in payload.get("Indexers") or []:
+            if isinstance(indexer, dict) and indexer.get("Error"):
+                idx = str(indexer.get("ID") or "")
+                if idx:
+                    self._observed_errors[idx] = str(indexer.get("Name") or idx)
+
     async def search(self, query: str) -> list[TorrentData]:
         url = f"{self._base_url}/api/v2.0/indexers/all/results"
         # Query is quoted to keep the legacy phrase-search behavior;
         # aiohttp percent-encodes all parameter values safely.
         params = {"apikey": self._api_key, "Query": f'"{query[:MAX_QUERY_LENGTH]}"'}
         payload = await self._fetch_json(url, params, "search")
+        # every search reports per-indexer health for free — feed the monitor
+        self._record_observed_errors(payload)
         results = payload.get("Results") or []
         parsed = [item for item in map(parse_result, results) if item is not None]
         logger.info(
@@ -230,6 +252,25 @@ class JackettClient:
         if not isinstance(indexers, list):
             raise JackettError("Unexpected indexers payload")
         return indexers
+
+    async def probe_indexer(self, indexer_id: str) -> str | None:
+        """Re-test one indexer; returns its error text, or None when healthy.
+
+        Querying an indexer makes Jackett re-attempt it, so the probe doubles
+        as the recovery action after transient failures (expired session,
+        tracker hiccup) without touching the healthy indexers.
+        """
+        if not _INDEXER_ID.fullmatch(indexer_id):
+            logger.warning("Refusing to probe suspicious indexer id %r", indexer_id)
+            return "invalid indexer id"
+        url = f"{self._base_url}/api/v2.0/indexers/{indexer_id}/results"
+        params = {"apikey": self._api_key, "Query": ""}
+        payload = await self._fetch_json(url, params, f"probe {indexer_id}")
+        for indexer in payload.get("Indexers") or []:
+            if isinstance(indexer, dict) and str(indexer.get("ID") or "") == indexer_id:
+                error = indexer.get("Error")
+                return str(error) if error else None
+        return None
 
     async def download(self, url: str) -> bytes:
         """Fetch a .torrent file from Jackett, enforcing origin and size caps."""

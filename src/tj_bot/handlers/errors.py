@@ -4,6 +4,7 @@ from aiogram import Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import ErrorEvent
 
+from tj_bot.services.feedback import alert_or_message
 from tj_bot.services.formatting import padded
 
 logger = logging.getLogger(__name__)
@@ -26,12 +27,9 @@ async def on_error(event: ErrorEvent) -> None:
     logger.exception("Unhandled error while processing update", exc_info=exception)
     callback = event.update.callback_query
     if callback is not None:
-        # a popup instead of flooding the chat; transient network errors will
-        # fail this call the same way, so it is best-effort by design
-        try:
-            await callback.answer(USER_FACING_ERROR, show_alert=True)
-        except TelegramAPIError:
-            logger.warning("Failed to deliver the error alert")
+        # popup while the query is alive; expired queries (slow handler)
+        # degrade to a chat message so the user is never left in the dark
+        await alert_or_message(callback, USER_FACING_ERROR)
         return
     message = event.update.message
     if message is None:

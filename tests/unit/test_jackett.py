@@ -179,6 +179,31 @@ async def test_download_above_cap_rejected(
         await client.download(str(app_url(client)) + "dl")
 
 
+async def test_download_timeout_is_capped_separately(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Downloads must not inherit the long search timeout of the session."""
+    import asyncio
+
+    from aiohttp import ClientTimeout
+
+    monkeypatch.setattr(
+        "tj_bot.services.jackett.DOWNLOAD_TIMEOUT", ClientTimeout(total=0.05)
+    )
+
+    async def slow_handler(request: web.Request) -> web.Response:
+        await asyncio.sleep(0.3)
+        return web.Response(body=b"x")
+
+    app = web.Application()
+    app.router.add_get("/dl", slow_handler)
+    client = await jackett_env(app)
+
+    with pytest.raises(JackettError, match="Download failed"):
+        await client.download(str(app_url(client)) + "dl")
+
+
 def app_url(client: JackettClient) -> str:
     return client._base_url + "/"  # noqa: SLF001  # test reaches into the client
 
@@ -215,6 +240,17 @@ def test_parse_result_truncates_long_description() -> None:
     assert data.description is not None
     assert len(data.description) <= 520
     assert data.description.endswith("…")
+
+
+def test_parse_result_caps_pathological_description() -> None:
+    # a multi-hundred-KB blob without <br> makes the uploader regexes
+    # quadratic; the raw cap keeps parsing bounded (this test hangs without it)
+    huge = "Uploader: bob " + "x" * 300_000
+    data = parse_result({**RESULT, "Description": huge})
+    assert data is not None
+    assert data.uploader == "bob"
+    assert data.description is not None
+    assert len(data.description) <= 520
 
 
 async def test_search_survives_one_malformed_result(

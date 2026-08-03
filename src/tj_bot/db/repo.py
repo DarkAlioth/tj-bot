@@ -49,6 +49,16 @@ class TorrentRepo:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def commit(self) -> None:
+        """Commit the per-update transaction early, releasing its row locks.
+
+        Handlers call this right before long external I/O (Jackett searches
+        and downloads): an open transaction would pin a pool connection and
+        the caller's ``bot_users`` row lock from ``touch_user`` for the whole
+        call, serializing every other update from the same user behind it.
+        """
+        await self.session.commit()
+
     async def upsert_torrents(self, items: list[TorrentData]) -> list[int]:
         """Insert new torrents or refresh volatile fields of known ones.
 

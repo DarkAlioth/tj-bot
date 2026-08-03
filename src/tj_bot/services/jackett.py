@@ -16,8 +16,14 @@ logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 200
 MAX_DESCRIPTION_CHARS = 500
+# cap applied before any regex work: the uploader patterns backtrack across
+# the whole string, and a tracker can return a multi-hundred-KB description
+MAX_RAW_DESCRIPTION_CHARS = 4096
 # one retry on transient connection failures (not timeouts: those are slow)
 RETRY_DELAY_SECONDS = 2.0
+# .torrent files are tiny; do not let a download wait out the long search
+# timeout the session is configured with
+DOWNLOAD_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]", flags=re.UNICODE)
 
@@ -69,6 +75,8 @@ def _parse_result(torrent: dict[str, Any]) -> TorrentData | None:
         return None
     title = html.escape(torrent.get("Title") or "None")
     description: str | None = torrent.get("Description") or None
+    if description and len(description) > MAX_RAW_DESCRIPTION_CHARS:
+        description = description[:MAX_RAW_DESCRIPTION_CHARS]
     uploader: str | None = None
     if description:
         match = re.search(r"Uploader:\s*(\S+)", description)
@@ -229,7 +237,7 @@ class JackettClient:
             logger.warning("Blocked download from untrusted URL: %r", url)
             raise UntrustedDownloadError
         try:
-            async with self._get_session().get(url) as resp:
+            async with self._get_session().get(url, timeout=DOWNLOAD_TIMEOUT) as resp:
                 if resp.status != 200:
                     msg = f"Download returned HTTP {resp.status}"
                     raise JackettError(msg)

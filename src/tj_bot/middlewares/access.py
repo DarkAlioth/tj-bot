@@ -30,4 +30,8 @@ class AccessMiddleware(BaseMiddleware):
         if isinstance(config, AppConfig) and not config.is_admin(user.id):
             if await repo.is_blocked(user.id):
                 return None
+        # release the bot_users row lock before the handler: a slow handler
+        # (search, download) would otherwise block every other update from
+        # the same user on their touch_user upsert until it finishes
+        await repo.commit()
         return await handler(event, data)

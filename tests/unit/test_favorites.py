@@ -198,7 +198,7 @@ async def test_download_favorite_sends_document() -> None:
     repo.record_download.assert_awaited_once_with(111, "Movie 1080p", "chat")
 
 
-async def test_download_favorite_reports_stale_link() -> None:
+async def test_download_favorite_reports_stale_link_via_alert() -> None:
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_favorite.return_value = make_favorite()
@@ -207,7 +207,8 @@ async def test_download_favorite_reports_stale_link() -> None:
 
     await download_favorite(query, Fav(a="dl", id=7), repo, jackett)
 
-    assert "устареть" in query.message.answer.await_args.args[0]
+    assert "устареть" in query.answer.await_args.args[0]
+    assert query.answer.await_args.kwargs.get("show_alert") is True
     repo.record_download.assert_not_awaited()
 
 

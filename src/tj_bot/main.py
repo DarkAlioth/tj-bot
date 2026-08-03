@@ -149,7 +149,12 @@ async def main(settings: Settings) -> None:
         background_tasks.append(
             asyncio.create_task(
                 monitor_loop(
-                    bot, jackett, qbit, config, settings.alert_check_interval_seconds
+                    bot,
+                    jackett,
+                    qbit,
+                    config,
+                    settings.alert_check_interval_seconds,
+                    settings.alert_recheck_interval_seconds,
                 )
             )
         )

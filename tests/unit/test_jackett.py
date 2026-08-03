@@ -294,3 +294,78 @@ async def test_indexers_extracts_health_from_results(
 
     assert [i["Name"] for i in indexers] == ["RuTracker", "Dead"]
     assert indexers[1]["Error"] == "timeout"
+
+
+async def test_search_records_observed_indexer_errors(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+) -> None:
+    async def handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "Results": [RESULT],
+                "Indexers": [
+                    {"ID": "ok", "Name": "Ok", "Error": None},
+                    {"ID": "dead", "Name": "Dead", "Error": "timeout"},
+                ],
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/all/results", handler)
+    client = await jackett_env(app)
+
+    await client.search("x")
+
+    assert client.observed_errors() == {"dead": "Dead"}
+    # take() consumes: the monitor must not re-confirm the same observation
+    assert client.take_observed_errors() == {"dead": "Dead"}
+    assert client.observed_errors() == {}
+
+
+async def test_probe_indexer_returns_error_or_none(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+) -> None:
+    state = {"error": "cf challenge"}
+
+    async def handler(request: web.Request) -> web.Response:
+        assert request.query["Query"] == ""
+        return web.json_response(
+            {
+                "Results": [],
+                "Indexers": [
+                    {
+                        "ID": "rutracker",
+                        "Name": "RuTracker.org",
+                        "Error": state["error"],
+                    }
+                ],
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/rutracker/results", handler)
+    client = await jackett_env(app)
+
+    assert await client.probe_indexer("rutracker") == "cf challenge"
+
+    state["error"] = ""
+    assert await client.probe_indexer("rutracker") is None
+
+
+async def test_probe_indexer_refuses_suspicious_id(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+) -> None:
+    seen: list[str] = []
+
+    async def handler(request: web.Request) -> web.Response:
+        seen.append(request.path)
+        return web.json_response({"Results": [], "Indexers": []})
+
+    app = web.Application()
+    app.router.add_route("GET", "/{tail:.*}", handler)
+    client = await jackett_env(app)
+
+    # traversal-looking ids never reach the URL (yarl decodes %2F back)
+    for hostile in ("../server/config", "..", "", "a/b"):
+        assert await client.probe_indexer(hostile) == "invalid indexer id"
+    assert seen == []

@@ -2,6 +2,7 @@ import datetime
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from aiogram import types
 from aiogram.types import CallbackQuery, Message
 
@@ -212,27 +213,53 @@ async def test_download_favorite_reports_stale_link_via_alert() -> None:
     repo.record_download.assert_not_awaited()
 
 
-async def test_favorite_to_server_opens_category_menu() -> None:
+async def test_favorite_to_server_opens_file_picker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: dict[str, str] = {}
+
+    async def fake_begin(
+        query: object,
+        message: object,
+        repo: object,
+        jackett: object,
+        qbit: object,
+        config: object,
+        name: str,
+        download_url: str,
+    ) -> None:
+        started["name"] = name
+        started["url"] = download_url
+
+    monkeypatch.setattr("tj_bot.handlers.favorites.begin_torrent_send", fake_begin)
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
     repo.get_favorite.return_value = make_favorite()
-    qbit = AsyncMock(spec=QbittorrentClient)
-    qbit.categories.return_value = {"tj-bot": {"savePath": "/dl"}}
-    qbit.free_space.return_value = 100 * 1024**3
 
     await favorite_to_server(
-        query, Fav(a="sv", id=7), repo, qbit, make_config(admin=True)
+        query,
+        Fav(a="sv", id=7),
+        repo,
+        AsyncMock(spec=JackettClient),
+        AsyncMock(spec=QbittorrentClient),
+        make_config(admin=True),
     )
 
-    body = query.message.answer.await_args.args[0]
-    assert "Выберите категорию" in body
+    assert started["name"] == "Movie 1080p"
 
 
 async def test_favorite_to_server_denied_for_users() -> None:
     query = make_query()
     repo = AsyncMock(spec=TorrentRepo)
 
-    await favorite_to_server(query, Fav(a="sv", id=7), repo, None, make_config())
+    await favorite_to_server(
+        query,
+        Fav(a="sv", id=7),
+        repo,
+        AsyncMock(spec=JackettClient),
+        None,
+        make_config(),
+    )
 
     assert query.answer.await_args.kwargs.get("show_alert") is True
     repo.get_favorite.assert_not_awaited()

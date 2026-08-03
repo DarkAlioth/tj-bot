@@ -94,6 +94,7 @@ class QbittorrentClient:
         tag: str,
         category: str | None = None,
         paused: bool = False,
+        stop_condition: str | None = None,
     ) -> None:
         form = aiohttp.FormData()
         form.add_field(
@@ -107,6 +108,8 @@ class QbittorrentClient:
             form.add_field("category", category)
         # "stopped" is the WebAPI 2.11+ name; older builds ignore the extra field
         form.add_field("stopped", str(paused).lower())
+        if stop_condition:
+            form.add_field("stopCondition", stop_condition)
         body = await self._request("POST", "/api/v2/torrents/add", data=form)
         if body.strip().lower() != "ok.":
             raise QbittorrentError("qBittorrent rejected the torrent")
@@ -117,11 +120,14 @@ class QbittorrentClient:
         tag: str,
         category: str | None = None,
         paused: bool = False,
+        stop_condition: str | None = None,
     ) -> None:
         """Add a torrent by URL or magnet link (the qBittorrent ``urls`` field)."""
         data = {"urls": url, "tags": tag, "stopped": str(paused).lower()}
         if category:
             data["category"] = category
+        if stop_condition:
+            data["stopCondition"] = stop_condition
         body = await self._request("POST", "/api/v2/torrents/add", data=data)
         if body.strip().lower() != "ok.":
             raise QbittorrentError("qBittorrent rejected the magnet")
@@ -182,6 +188,27 @@ class QbittorrentClient:
             params={"sort": "added_on", "reverse": "true"},
         )
         return self._parse_json_list(body)
+
+    async def torrent_files(self, torrent_hash: str) -> list[dict[str, Any]]:
+        """Files inside a torrent; empty until a magnet's metadata arrives."""
+        body = await self._request(
+            "GET", "/api/v2/torrents/files", params={"hash": torrent_hash}
+        )
+        return self._parse_json_list(body)
+
+    async def set_file_priority(
+        self, torrent_hash: str, file_ids: str, priority: int
+    ) -> None:
+        """Set priority for files; ``file_ids`` is '0' or a '0|1|2' batch."""
+        await self._request(
+            "POST",
+            "/api/v2/torrents/filePrio",
+            data={
+                "hash": torrent_hash,
+                "id": file_ids,
+                "priority": str(priority),
+            },
+        )
 
     async def torrent_info(self, torrent_hash: str) -> dict[str, Any] | None:
         body = await self._request(

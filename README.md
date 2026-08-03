@@ -28,8 +28,8 @@ A self-hosted Telegram bot for torrent search. It queries a private [Jackett](ht
 
 **Downloads**
 - Download the `.torrent` file straight into the chat
-- **Admin — send to server**: pick a qBittorrent category (fetched live, save path follows the category) with a free-disk-space readout and a low-space warning, then watch **live progress in the chat** with pause / resume / delete buttons
-- **Admin — magnet links**: send a `magnet:` link to the bot to queue it the same way (pending magnets survive bot restarts)
+- **Admin — send to server**: the torrent is added stopped and a **file picker** opens — every file ticked by default, toggle the ones you need (✅ Все / ▫️ Ничего, paginated for big torrents) with a live selected-size and free-disk-space readout, then start and watch **live progress in the chat** with pause / resume / delete buttons; the default category from the settings is applied automatically
+- **Admin — magnet links**: send a `magnet:` link to the bot — it waits for the metadata and opens the same file picker (selection state lives in qBittorrent, so it survives bot restarts)
 - **Admin — qBittorrent console** (`/dl`): live transfer stats, filterable torrent list, per-torrent control (pause/resume, force start, queue priority, delete with or without data), and global stop/start plus alternative-speed toggle
 
 **Access & administration**
@@ -101,7 +101,7 @@ All settings come from `.env` (never committed):
 | `SEARCH_CACHE_SECONDS`        | no       | `3600`             | Window for serving a search from cache         |
 | `CACHE_TTL_DAYS`              | no       | `7`                | Age after which cached results are purged      |
 | `QBIT_URL` / `_USERNAME` / `_PASSWORD` | no | —              | qBittorrent Web API; unset disables the feature |
-| `QBIT_CATEGORY`               | no       | `tj-bot`           | Default category offered first in the picker   |
+| `QBIT_CATEGORY`               | no       | `tj-bot`           | Category applied to every server download      |
 | `QBIT_POLL_INTERVAL_SECONDS`  | no       | `30`               | Live-progress refresh interval                 |
 | `ALERT_CHECK_INTERVAL_SECONDS`| no       | `1800`             | Monitor pass interval; `0` disables alerts     |
 | `ALERT_FREE_SPACE_GB`         | no       | `10`               | Low-disk threshold for qBittorrent alerts      |

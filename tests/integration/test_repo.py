@@ -68,7 +68,6 @@ async def session() -> AsyncGenerator[AsyncSession]:
             "search_query_torrents",
             "search_queries",
             "torrents",
-            "magnet_links",
             "bot_users",
             "download_events",
             "favorites",
@@ -241,29 +240,6 @@ async def test_db_size_reports_positive_bytes(session: AsyncSession) -> None:
     repo = TorrentRepo(session)
 
     assert await repo.db_size() > 0
-
-
-async def test_magnet_save_get_and_ttl_cleanup(session: AsyncSession) -> None:
-    repo = TorrentRepo(session)
-    url = "magnet:?xt=urn:btih:abc&dn=Movie"
-
-    magnet_hash = await repo.save_magnet(url)
-    same_hash = await repo.save_magnet(url)
-    await session.commit()
-
-    assert magnet_hash == same_hash
-    assert await repo.get_magnet_url(magnet_hash) == url
-    assert await repo.get_magnet_url("f" * 32) is None
-
-    await session.execute(
-        text("UPDATE magnet_links SET created_at = now() - interval '10 days'")
-    )
-    await session.commit()
-    pool = async_sessionmaker(session.bind, expire_on_commit=False)
-    deleted = await cleanup_once(pool, datetime.timedelta(days=7))
-
-    assert deleted == 1
-    assert await repo.get_magnet_url(magnet_hash) is None
 
 
 async def test_recent_search_and_history_and_stats(session: AsyncSession) -> None:

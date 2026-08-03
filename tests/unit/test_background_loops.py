@@ -14,7 +14,9 @@ class LoopStopError(Exception):
 async def test_cleanup_loop_survives_db_error(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = {"n": 0}
 
-    async def fake_cleanup_once(pool: object, ttl: object) -> int:
+    async def fake_cleanup_once(
+        pool: object, cache_ttl: object, history_ttl: object
+    ) -> int:
         calls["n"] += 1
         if calls["n"] == 1:
             raise SQLAlchemyError("transient")
@@ -29,7 +31,12 @@ async def test_cleanup_loop_survives_db_error(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(asyncio, "sleep", fake_sleep)
 
     with pytest.raises(LoopStopError):
-        await cleanup_loop(MagicMock(), ttl=MagicMock(), interval_seconds=1)
+        await cleanup_loop(
+            MagicMock(),
+            cache_ttl=MagicMock(),
+            history_ttl=MagicMock(),
+            interval_seconds=1,
+        )
 
     # first iteration raised SQLAlchemyError but the loop continued to a second
     assert calls["n"] == 2

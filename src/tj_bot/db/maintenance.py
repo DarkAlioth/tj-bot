@@ -11,23 +11,26 @@ logger = logging.getLogger(__name__)
 
 
 async def cleanup_once(
-    session_pool: async_sessionmaker[AsyncSession], ttl: datetime.timedelta
+    session_pool: async_sessionmaker[AsyncSession],
+    cache_ttl: datetime.timedelta,
+    history_ttl: datetime.timedelta,
 ) -> int:
     async with session_pool() as session:
-        deleted = await TorrentRepo(session).delete_stale(ttl)
+        deleted = await TorrentRepo(session).delete_stale(cache_ttl, history_ttl)
         await session.commit()
     return deleted
 
 
 async def cleanup_loop(
     session_pool: async_sessionmaker[AsyncSession],
-    ttl: datetime.timedelta,
+    cache_ttl: datetime.timedelta,
+    history_ttl: datetime.timedelta,
     interval_seconds: int,
 ) -> None:
-    """Periodically purge cache entries older than the TTL."""
+    """Periodically purge the result cache and expired history."""
     while True:
         try:
-            deleted = await cleanup_once(session_pool, ttl)
+            deleted = await cleanup_once(session_pool, cache_ttl, history_ttl)
             if deleted:
                 logger.info("Cache cleanup removed %s rows", deleted)
         except SQLAlchemyError:

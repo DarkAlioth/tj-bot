@@ -24,16 +24,28 @@ users_router.callback_query.filter(AdminOnly())
 USERS_PAGE_SIZE = 10
 
 GROUP_ALL = "a"
+GROUP_REGULAR = "r"
 GROUP_ADMINS = "m"
 GROUP_BLOCKED = "b"
 # short button labels; the header uses the descriptive form
-TAB_LABELS = {GROUP_ALL: "👥 Все", GROUP_ADMINS: "⭐ Админы", GROUP_BLOCKED: "🚫 Блок"}
+TAB_LABELS = {
+    GROUP_ALL: "👥 Все",
+    GROUP_REGULAR: "👤 Обычные",
+    GROUP_ADMINS: "⭐ Админы",
+    GROUP_BLOCKED: "🚫 Блок",
+}
 HEADER_LABELS = {
     GROUP_ALL: "все",
+    GROUP_REGULAR: "обычные",
     GROUP_ADMINS: "админы",
     GROUP_BLOCKED: "заблокированные",
 }
-REPO_GROUPS = {GROUP_ALL: "all", GROUP_ADMINS: "admins", GROUP_BLOCKED: "blocked"}
+REPO_GROUPS = {
+    GROUP_ALL: "all",
+    GROUP_REGULAR: "regular",
+    GROUP_ADMINS: "admins",
+    GROUP_BLOCKED: "blocked",
+}
 
 
 class Usr(CallbackData, prefix="usr"):

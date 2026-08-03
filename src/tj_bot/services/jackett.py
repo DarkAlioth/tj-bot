@@ -253,6 +253,17 @@ class JackettClient:
             raise JackettError("Unexpected indexers payload")
         return indexers
 
+    async def search_indexer(self, indexer_id: str, query: str) -> list[TorrentData]:
+        """Search a single indexer; used by the favorites update watcher."""
+        if not _INDEXER_ID.fullmatch(indexer_id):
+            logger.warning("Refusing to search suspicious indexer id %r", indexer_id)
+            return []
+        url = f"{self._base_url}/api/v2.0/indexers/{indexer_id}/results"
+        params = {"apikey": self._api_key, "Query": query[:MAX_QUERY_LENGTH]}
+        payload = await self._fetch_json(url, params, f"search {indexer_id}")
+        results = payload.get("Results") or []
+        return [item for item in map(parse_result, results) if item is not None]
+
     async def probe_indexer(self, indexer_id: str) -> str | None:
         """Re-test one indexer; returns its error text, or None when healthy.
 

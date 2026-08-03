@@ -24,7 +24,7 @@ A self-hosted Telegram bot for torrent search. It queries a private [Jackett](ht
 - **Instant cache** — repeat queries render from PostgreSQL with no tracker round-trip (⚡ badge), with a 🔄 refresh button for a live re-query
 - Per-user search history (`/history`) with one-tap replay, and `/last` to repeat the most recent query
 - **Inline mode** — `@your_bot <query>` in any chat serves cached results as shareable cards (enable via BotFather → `/setinline`)
-- **Favorites** — save any result (☆ Сохранить → ⭐ Сохранено, state shown while paging); `/favorites` keeps a snapshot that survives cache expiry, with download / send-to-server / remove actions
+- **Favorites** — save any result (☆ Сохранить → ⭐ Сохранено, state shown while paging); `/favorites` keeps a snapshot that survives cache expiry, with download / send-to-server / remove actions. Favorited topics are re-checked on the tracker periodically: when the release changes (new episodes), every owner gets a notification with a download button (admins also get send-to-server)
 
 **Downloads**
 - Download the `.torrent` file straight into the chat
@@ -34,7 +34,7 @@ A self-hosted Telegram bot for torrent search. It queries a private [Jackett](ht
 
 **Access & administration**
 - Open bot with guardrails: per-user rate limiting plus a quota on tracker-hitting actions; admins exempt
-- User management (`/users`): group tabs (all / admins / blocked) with pagination, block/unblock, promote runtime admins, per-user search & download activity timeline
+- User management (`/users`): group tabs (all / regular / admins / blocked) with pagination, block/unblock, promote runtime admins, per-user search & download activity timeline (kept for `HISTORY_TTL_DAYS`, default 30, independent of the 7-day result cache)
 - `/health` — uptime, database size, disk space, qBittorrent summary, and Jackett indexer health in one message
 - `/broadcast` — draft-preview-confirm announcement to every active user
 - **Edge-triggered alerts** — admins get notified when an indexer goes down (and when it recovers), when Jackett is unreachable, or when the qBittorrent disk runs low; deploy restarts stay silent

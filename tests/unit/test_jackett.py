@@ -369,3 +369,24 @@ async def test_probe_indexer_refuses_suspicious_id(
     for hostile in ("../server/config", "..", "", "a/b"):
         assert await client.probe_indexer(hostile) == "invalid indexer id"
     assert seen == []
+
+
+async def test_search_indexer_queries_one_tracker(
+    jackett_env: Callable[[web.Application], Awaitable[JackettClient]],
+) -> None:
+    seen: dict[str, str] = {}
+
+    async def handler(request: web.Request) -> web.Response:
+        seen.update(request.query)
+        return web.json_response({"Results": [RESULT]})
+
+    app = web.Application()
+    app.router.add_get("/api/v2.0/indexers/rutracker/results", handler)
+    client = await jackett_env(app)
+
+    items = await client.search_indexer("rutracker", "Series S01")
+
+    assert len(items) == 1
+    assert seen["Query"] == "Series S01"
+    # hostile ids never reach the URL
+    assert await client.search_indexer("../all", "x") == []

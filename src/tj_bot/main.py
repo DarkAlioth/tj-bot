@@ -32,6 +32,7 @@ from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
+from tj_bot.services.favorites_watcher import favorites_watch_loop
 from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import JackettClient
 from tj_bot.services.monitor import monitor_loop
@@ -139,12 +140,25 @@ async def main(settings: Settings) -> None:
         asyncio.create_task(
             cleanup_loop(
                 session_pool,
-                ttl=datetime.timedelta(days=settings.cache_ttl_days),
+                cache_ttl=datetime.timedelta(days=settings.cache_ttl_days),
+                history_ttl=datetime.timedelta(days=settings.history_ttl_days),
                 interval_seconds=settings.cleanup_interval_seconds,
             )
         ),
         asyncio.create_task(heartbeat_loop()),
     ]
+    if settings.favorites_check_interval_seconds > 0:
+        background_tasks.append(
+            asyncio.create_task(
+                favorites_watch_loop(
+                    bot,
+                    jackett,
+                    session_pool,
+                    config,
+                    settings.favorites_check_interval_seconds,
+                )
+            )
+        )
     if settings.alert_check_interval_seconds > 0:
         background_tasks.append(
             asyncio.create_task(

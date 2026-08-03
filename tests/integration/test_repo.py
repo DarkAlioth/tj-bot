@@ -144,10 +144,17 @@ async def test_create_search_is_idempotent(session: AsyncSession) -> None:
     assert await repo.count_results("qh", None) == 1
 
 
-async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None:
+async def test_cleanup_separates_cache_and_history_ttls(
+    session: AsyncSession,
+) -> None:
     repo = TorrentRepo(session)
     ids = await repo.upsert_torrents([make_torrent("old"), make_torrent("fresh")])
-    await repo.create_search("qh-old", [ids[0]])
+    await repo.create_search("qh-recent", [ids[0]])
+    await repo.create_search("qh-ancient", [ids[1]])
+    recent = await repo.get_search("qh-recent")
+    assert recent is not None
+    await repo.record_search_event(500, recent.id)
+    await repo.record_download(500, "Old movie", "chat")
     await session.commit()
     await session.execute(
         text(
@@ -156,17 +163,37 @@ async def test_cleanup_removes_stale_entries_only(session: AsyncSession) -> None
         )
     )
     await session.execute(
-        text("UPDATE search_queries SET created_at = now() - interval '10 days'")
+        text(
+            "UPDATE search_queries SET created_at = now() - interval '10 days' "
+            "WHERE hash = 'qh-recent'"
+        )
+    )
+    await session.execute(
+        text(
+            "UPDATE search_queries SET created_at = now() - interval '40 days' "
+            "WHERE hash = 'qh-ancient'"
+        )
+    )
+    await session.execute(
+        text("UPDATE download_events SET created_at = now() - interval '40 days'")
     )
     await session.commit()
 
     pool = async_sessionmaker(session.bind, expire_on_commit=False)
-    deleted = await cleanup_once(pool, datetime.timedelta(days=7))
+    deleted = await cleanup_once(
+        pool, datetime.timedelta(days=7), datetime.timedelta(days=30)
+    )
 
-    assert deleted == 2
+    # the 10-day-old cache torrent dies, but the 10-day-old query — and the
+    # search history hanging off it — survives the shorter cache TTL
+    assert deleted == 3  # old torrent + ancient query + ancient download event
     assert await repo.get_torrent_by_hash("old") is None
     assert await repo.get_torrent_by_hash("fresh") is not None
-    assert await repo.get_search("qh-old") is None
+    assert await repo.get_search("qh-recent") is not None
+    assert await repo.get_search("qh-ancient") is None
+    searches, downloads = await repo.user_activity_counts(500)
+    assert searches == 1
+    assert downloads == 0
 
 
 async def test_get_result_list_orders_by_seeders(session: AsyncSession) -> None:
@@ -226,7 +253,7 @@ async def test_favorites_lifecycle_and_ttl_immunity(session: AsyncSession) -> No
     )
     await session.commit()
     pool = async_sessionmaker(session.bind, expire_on_commit=False)
-    await cleanup_once(pool, datetime.timedelta(days=7))
+    await cleanup_once(pool, datetime.timedelta(days=7), datetime.timedelta(days=30))
     assert await repo.get_torrent_by_hash("f1") is None
     assert await repo.count_favorites(111) == 1
 

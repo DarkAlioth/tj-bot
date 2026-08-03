@@ -347,6 +347,26 @@ class TorrentRepo:
         )
         return (await self.session.execute(stmt)).scalar_one_or_none() is not None
 
+    async def list_all_favorites(self) -> list[Favorite]:
+        """Every favorite of every user, for the tracker-update watcher."""
+        stmt = select(Favorite).order_by(Favorite.id)
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def update_favorite_snapshot(
+        self, favorite_id: int, item: TorrentData
+    ) -> None:
+        """Refresh a favorite from a fresh tracker result (same topic)."""
+        favorite = await self.session.get(Favorite, favorite_id)
+        if favorite is None:
+            return
+        favorite.title = item.title
+        favorite.torrent_hash = item.hash
+        favorite.download_url = item.download_url
+        favorite.seeders = item.seeders
+        favorite.size = item.size
+        favorite.published_at = item.published_at
+        await self.session.flush()
+
     async def remove_favorite_by_hash(self, user_id: int, torrent_hash: str) -> None:
         await self.session.execute(
             delete(Favorite).where(
@@ -389,16 +409,28 @@ class TorrentRepo:
         # DELETE always yields a CursorResult, which carries rowcount
         return int(cast(CursorResult[int], result).rowcount or 0)
 
-    async def delete_stale(self, ttl: datetime.timedelta) -> int:
-        """Delete queries and torrents untouched for longer than ``ttl``."""
-        cutoff = datetime.datetime.now(datetime.UTC) - ttl
+    async def delete_stale(
+        self, cache_ttl: datetime.timedelta, history_ttl: datetime.timedelta
+    ) -> int:
+        """Purge the result cache after ``cache_ttl`` and history after ``history_ttl``.
+
+        Search queries live as long as the history: search_events cascade
+        with them, and deleting queries on the short cache TTL used to wipe
+        the users' search history within a week.
+        """
+        now = datetime.datetime.now(datetime.UTC)
+        cache_cutoff = now - cache_ttl
+        history_cutoff = now - history_ttl
         deleted_queries = await self._delete_rows(
-            delete(SearchQuery).where(SearchQuery.created_at < cutoff)
+            delete(SearchQuery).where(SearchQuery.created_at < history_cutoff)
         )
         deleted_torrents = await self._delete_rows(
-            delete(Torrent).where(Torrent.updated_at < cutoff)
+            delete(Torrent).where(Torrent.updated_at < cache_cutoff)
         )
-        return deleted_queries + deleted_torrents
+        deleted_downloads = await self._delete_rows(
+            delete(DownloadEvent).where(DownloadEvent.created_at < history_cutoff)
+        )
+        return deleted_queries + deleted_torrents + deleted_downloads
 
     async def touch_user(
         self, user_id: int, username: str | None, full_name: str | None
@@ -449,6 +481,14 @@ class TorrentRepo:
             return [admin_flag]
         if group == "blocked":
             return [BotUser.blocked.is_(True)]
+        if group == "regular":
+            conditions: list[ColumnElement[bool]] = [
+                BotUser.admin.is_(False),
+                BotUser.blocked.is_(False),
+            ]
+            if super_ids:
+                conditions.append(BotUser.user_id.notin_(super_ids))
+            return conditions
         return []
 
     async def count_users(

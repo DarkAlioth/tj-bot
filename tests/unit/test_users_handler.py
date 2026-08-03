@@ -196,7 +196,7 @@ async def test_user_list_shows_tabs_and_user_buttons() -> None:
 
     assert "все: 2" in text
     tab_row = [b.text for b in kb.inline_keyboard[0]]
-    assert tab_row == ["• 👥 Все", "⭐ Админы", "🚫 Блок"]
+    assert tab_row == ["• 👥 Все", "👤 Обычные", "⭐ Админы", "🚫 Блок"]
     repo.list_users_page.assert_awaited_once_with(10, 0, "all", [])
     user_callbacks = [b.callback_data for b in (r[0] for r in kb.inline_keyboard[1:])]
     assert Us2(a="card", uid=100, g="a", p=0).pack() in user_callbacks
@@ -267,3 +267,16 @@ async def test_legacy_usr_buttons_still_work() -> None:
     await legacy_user_action(query, Usr(a="list", uid=0), repo, config, bot)
     assert query.message.edit_text.await_count == 2
     assert "все: 1" in query.message.edit_text.await_args.args[0]
+
+
+async def test_user_list_regular_group_maps_to_repo_filter() -> None:
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.count_users.return_value = 1
+    repo.list_users_page.return_value = [make_user(100)]
+
+    text, kb = await build_user_list(repo, make_config({5}), "r", 0)
+
+    assert "обычные: 1" in text
+    repo.count_users.assert_awaited_once_with("regular", [5])
+    tab_row = [b.text for b in kb.inline_keyboard[0]]
+    assert "• 👤 Обычные" in tab_row

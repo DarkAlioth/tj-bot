@@ -35,7 +35,7 @@ from tj_bot.services import broadcaster
 from tj_bot.services.favorites_watcher import favorites_watch_loop
 from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import JackettClient
-from tj_bot.services.monitor import monitor_loop
+from tj_bot.services.monitor import MonitorState, monitor_loop
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 from tj_bot.widgets.dispatch import (
     WidgetQueryMiddleware,
@@ -140,9 +140,13 @@ async def main(settings: Settings) -> None:
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
+    monitor = MonitorState()
     dp["jackett"] = jackett
     dp["qbit"] = qbit
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
+    dp["monitor"] = monitor
+    # background tasks spawned by widget handlers open their own sessions
+    dp["session_pool"] = session_pool
     dp.include_routers(*routers_list)
     dp.update.outer_middleware(WidgetQueryMiddleware(dp))
     register_global_middlewares(dp, config, session_pool)
@@ -181,6 +185,7 @@ async def main(settings: Settings) -> None:
                     config,
                     settings.alert_check_interval_seconds,
                     settings.alert_recheck_interval_seconds,
+                    state=monitor,
                 )
             )
         )

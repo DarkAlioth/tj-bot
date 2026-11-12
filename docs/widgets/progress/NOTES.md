@@ -52,3 +52,18 @@ Re-adding any of these needs the same number of bytes removed elsewhere.
   receipt time) and `chatData` edits in the mock omit `t` too; the real bot sends `t`.
 - Profile audit clean: 41 CSS rules, 2 keyframes, no opacity/filter/images/inputs/focus; all
   colors from `--tg-theme-*`.
+
+## QA pass 2026-11-12
+
+- Overflow-proofing: title `overflow-wrap:anywhere`; the state line (`.st`) is a one-line ellipsis so a
+  state change («Принудительная загрузка · 1,2 ТБ») never re-flows the hero; footer buttons are
+  `min-width:0` + ellipsis as a safety net, and «Только из клиента» became «Из клиента» (150 px did not fit a
+  142 px half at 320).
+- Layout stability: the toast line (`.to`) now reserves 18 px instead of `display:none` when empty, so
+  success/error toasts never move the buttons; ticks only change numbers inside fixed-height tiles.
+- Reduced motion: `!important` rule (the `*{…-duration:0s}` form was overridden by class selectors).
+- `mock.json`: top-level `caption`; scenario #9 «Стресс» (100-char name without spaces, `forcedDL`, 1,2 ТБ,
+  5-digit seeds/peers, ratio 123,45, 1999 / 2000 files, two bg ticks with moving numbers); scenario #7 now
+  rejects with `delay:1800` so the stale state appears after the audit's first snapshot (the harness logs
+  the rejection, which the audit would count as a problem).
+- Height 518 px at 320 (494 + the reserved toast line). Size: 9 106 B raw / **4 064 B** zlib-9.

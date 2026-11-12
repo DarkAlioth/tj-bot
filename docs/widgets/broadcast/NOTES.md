@@ -69,3 +69,11 @@ the confirm; run 232 px; done 262 px; cancel 173 px; collapsed 60 px. Nothing ab
 - `gen/mock_gen.py` — regenerates `mock.json` and prints chat_data sizes (`python3 -I gen/mock_gen.py`).
 - `gen/shot.js` — Playwright screenshot runner used for the harness checks.
 - `preview/*.png` — harness screenshots (dark/light, 320–430 px).
+
+## QA pass 2026-11-12
+
+- The preview text now sits in an inner `.tx` box inside the card: `overflow:hidden` on the card itself
+  clipped at the padding edge, so the 11th line showed half-cut inside the bottom padding.
+- `mock.json`: #6–#8 «Стресс» (600-char text with a 91-char URL-like word, 1 234 recipients; run with
+  ticks → done; done 1 221 / 1 234). «Доставлено 1221 из 1234» wraps to two lines at 320 by design.
+- Heights at 320: draft 483 → 535 with the confirm card; done 281. Size: 7 846 B raw / **3 314 B** zlib-9.

@@ -2,74 +2,61 @@
 
 ## 1. What it is
 
-The list view that did not fit into the search card (card NOTES §1: list ≈ 320 B compressed on top of
-a card already at 4 073 B). Its own HTML: **6 271 B raw / 3 031 B zlib-9** (cap 4 096, aim 2 500 —
-see §4 for what the extra 500 B buy). Looks like the card: same body inset, `.g` ghost buttons, `.c`
-chips (30 px pills), `.ch` badge, `.m` meta, `.el` ellipsis, `.sq` 36 px squares, `.dots` pulse,
-error map, slide animation via `element.animate`, swipe on a `touch-action:pan-y` surface.
+The list view that did not fit into the search card. Own HTML: **6 358 B raw / ≈ 3 130 B zlib-9**
+(cap 4 096). Looks like the card: same body inset, `.g` ghost buttons, `.c` chips, `.ch` badge, `.m`
+meta, `.el` ellipsis, `.sq` 36 px squares, `.dots` pulse, error map, slide animation via
+`element.animate`, swipe on a `touch-action:pan-y` surface.
 
-Screens (harness, 320 px): 10 rows **544 px**, last page with 2 rows 195 px, empty 211 px, done
-~60 px (the harness reports a 150 px minimum). With the client's 22 px time band instead of the 10 px
-minimum padding the full page is 556 px — under the 560 target, 44 px under the 600 hard clip. Checked
-at 320/360/430, dark/light (`shots/`).
+## 2. Real-device round (2026-11-12) — what changed
 
-## 2. Layout decisions
+- **«Закрыть» ghost chip** in the header (right of «Результаты 1–10 из 302») → request `x`; the bot
+  deletes the message. Pending = dots inside the chip.
+- **Pager moved to the bottom row**: `‹ [sort] [Фильтры] [Карточка] ›` — squares at the ends, chips
+  stretched between (`.nv .c{flex:1}`), the same row the card has. Chips `.76em` / 4 px padding so
+  «Размер ↑» fits a 65 px chip at 320 px. The header had no room for «Закрыть» + ‹ › at 320 px.
+- **New hand-back flow**: a row tap / «Карточка» → `cd` → the bot sends a fresh card below and deletes
+  the list; `{"ok":1}` leaves the widget as is (it is about to disappear). The done state «✓ Открыта
+  карточка 7» / «✓ Закрыто» stays as the fallback (mock scenarios 1 and 4).
+- **No overflow**: `*{min-width:0}`, `body{overflow-wrap:anywhere}`, ellipsis on buttons/chips/title/meta,
+  the rating badge `flex:none`, index pill grows for 3-digit indexes. Buttons are inline-blocks so their
+  labels can ellipsise. `pointercancel` resets the swipe. Bottom padding includes
+  `var(--tg-content-safe-area-inset-bottom,0px)` so the stand shows the client's 22 px band.
+- Rating badge 18 px (was 20): with a rating on every row the page was 569 px; now every row is 42 px.
 
-- Header = «Результаты 11–20» (bold) + «из 302» (hint) + ‹ › squares on the right (the card's pager
-  position). A second line in hint colour = «дюна» · Сиды ↓; this line doubles as the **toast slot**
-  (success accent / error destructive, then the context comes back) — a separate footer cost 22 px
-  that the 10-row page did not have.
-- Rows: 22 px index pill (3-digit indexes grow into a pill), title `.95em/600` + optional ★ rating
-  badge on the right, meta line `.82em` hint. `padding:4px 0`, 1 px separators (`.r:first-child` has
-  none). Whole row is the tap target (`cursor:pointer`, `data-a=cd data-i=<index>`).
-- Bottom chips: sort label (from `sl`), «Фильтры» (accent dot when `fa`), «Карточка» (= first row).
-  Pager squares could not join this row at 320 px (293 px needed, 292 available) → they stay in the
-  header.
-- Done state: «✓ Открыта карточка 7» in hint colour, no controls, no header (one line as required).
-- Empty state: «Ничего не найдено с этими фильтрами» + the chips row, pager disabled, header
-  «Результаты 0».
+Heights (stand, 22 px band, 320 px): 10 rows **548 px** (558 before the badge change), stress page
+with 3-digit indexes and 10 ratings 549, last page with 2 rows 209, empty 225, done 150 (stand
+minimum). Audit at 320/360/430: no problems.
 
-## 3. Behaviour
+## 3. Layout
 
-- Row tap → `cd:ctx:<index>`; pending = the index pill shows the 3-dot pulse (`.ix.w{font-size:0}`
-  hides the number, the dots keep their px size). Every `[data-a]` loses pointer events while a request
-  is in flight (one request at a time).
-- ‹ › → `lp:ctx:<page>`; the square's glyph is hidden under the dots while pending. The answer (full
-  state) slides ±24 px with the content swapped at the midpoint, `selectionChanged` haptic.
-- Swipe: `pointerdown` records x; the drag claims the pointer (`setPointerCapture`) only once it
-  passes 10 px — **capturing on pointerdown broke row taps** (the click then targets the common
-  ancestor `.sw`, not the row). ≥ 56 px commits, rubber factor .12 at the ends, `pointercancel`
-  resets the transform. A committed swipe never also fires a row tap (the click lands on `.sw`).
-- Sort chip → `ls:ctx` with the next code (SK cycle like the card); `fs` → `{"ok":1}` does nothing
-  visible; `chatDataChanged` applied only when `r` grows.
-- `prefers-reduced-motion`: no slide, no dot pulse.
+- Header = «Результаты 11–20» (bold) + «из 302» (hint, thin-space thousands) + «Закрыть» ghost chip.
+  Second line in hint colour = «дюна» · Сиды ↓; it doubles as the **toast slot**.
+- Rows: 22 px index pill, title `.95em/600` + optional ★ rating badge, meta line `.82em` hint.
+  `padding:4px 0`, 1 px separators (`.r:first-child` has none). Whole row is the tap target.
+- Bottom row: ‹ (disabled on page 0), sort label, «Фильтры» (accent dot when `fa`), «Карточка»
+  (= first row), › (disabled on the last page).
+- Done state: one hint-coloured line, no controls, no header. Empty state: «Ничего не найдено с этими
+  фильтрами» + the bottom row.
 
-## 4. Tried / rejected / could be cut
+## 4. Behaviour
 
-- Rows as objects `{"i","t","m","im"}` → arrays `[t,m,im]` and the index derived from `i0`: −20 B per
-  row, −200 B per page of chat_data (the real constraint here, not the HTML).
-- Pre-formatted `m` «45 ГБ · 01.03.2024 · ⇡1 543 · RuTracker» (50 B) → pipe fields (36 B): −14 B
-  per row; the widget inserts « · » and ⇡. Pure layout, the values are still formatted by the bot.
-- 8 rows per page (BRIEF §2) → kept **10**: today's `LIST_PAGE_SIZE`, and the page arithmetic in
-  `lp:<page>` needs a fixed size. The byte budget is met by shrinking strings (PROTOCOL §1), never rows.
-- Two rating pills (IMDb + КП) per row — no room at 320 px; one pill, IMDb preferred.
-- Query text in the header line instead of a chip — a chip plus the sort label did not fit beside
-  the pager at 320 px.
-- Size budget beyond the 2 500 B aim: swipe ≈ 200 B, slide ≈ 120 B, error map ≈ 150 B. Drop the swipe
-  first if room is ever needed; the chips/pager stay as the discoverable path.
+- Row tap → `cd:ctx:<index>`; pending = the index pill shows the dots (`.ix.w{font-size:0}`).
+  Every `[data-a]` loses pointer events while a request is in flight.
+- ‹ › → `lp:ctx:<page>`; full-state answers slide ±24 px with the content swapped at the midpoint.
+- Swipe: `pointerdown` records x; the drag claims the pointer only after 10 px (capturing on
+  pointerdown broke row taps); ≥ 56 px commits, rubber factor .12 at the ends; `pointercancel` resets.
+- Sort chip → `ls:ctx` with the next code; `fs` / `x` / `cd` → `{"ok":1}` does nothing visible, a state
+  with `v` (done) is applied; `chatDataChanged` applied only when `r` grows.
+- Stand artifact: after a done answer the iframe keeps its old height (the stand never shrinks a frame);
+  the clients size the bubble to the content.
 
 ## 5. widget-rules.md checklist
 
-- No form controls, no images, no external resources, no `-webkit-line-clamp` (single-line
-  `text-overflow:ellipsis` only), no `vh`, no `:focus`, no CSS nesting, no `:has()`.
-- Colours: theme variables only (`--tg-theme-*`); accent dot = `--tg-theme-accent-text-color`.
-- Heavy elements: none (dots animate `transform`; disabled buttons are dimmed by the client).
-- Animations: 1 `@keyframes`, `element.animate` for the slide (Web Animations are in the profile).
-- Gestures: `touch-action:pan-y` only on the rows surface; holds stay with the chat; controls start at
-  14 px from the left edge inside the bubble (the leading 20 px band is the bubble's own margin area
-  in the client, same as the card).
-- `request()` only synchronously inside `click` / `pointerup` handlers.
-- `env(safe-area-inset-bottom)` padding with `body{margin:0}`; the chips row ends ~70 px before the
-  right corner where the time is drawn.
-- `localStorage`/`sessionStorage` not used; nothing to restore — the state is fully in chat_data.
-- 38 CSS rules, ≈ 95 nodes on a full page, no layout reads in hot paths (one `pg()` per event).
+- No form controls, no images, no external resources, no `-webkit-line-clamp`, no `vh`, no `:focus`,
+  no CSS nesting, no `:has()`; `max()` with `env()`/`var()` is in profile.
+- Colours: theme variables only. No opacity/filter → 0 heavy elements. 1 `@keyframes`.
+- `request()` only synchronously inside `click` / `pointerup`; one request at a time.
+- `env(safe-area-inset-bottom)` padding with `body{margin:0}`; the bottom row ends above the band.
+- ≈ 40 CSS rules, ≈ 95 nodes on a full page, no layout reads in hot paths.
+
+`mock.json` was edited directly in the real-device round (new `x` answers, `ok` flow, stress scenario); `shots/mock_gen.py` predates it and would overwrite those changes — do not run it without porting them.

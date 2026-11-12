@@ -79,3 +79,22 @@ disables transitions/animations, `transform:rotate/scale` 2D only, system font i
 (`??`, spread), `closest/dataset/innerHTML/querySelectorAll`, one layout read per draw, `setInterval`
 5.2 s stopped on `deactivated`, `request()` only in click handlers or the bg timer, no `focus()`, no
 storage, `TelegramWidget` guarded (`W&&`), haptics in try/catch. No `[disabled]` attributes used.
+
+## QA pass 2026-11-12
+
+- Tab and page changes now slide the list (`.sl`, 200 ms, `translateX(±24px)`, the pager follows the tap
+  direction, tabs always come from the right — the per-tab direction cost 37 B the budget did not have).
+  Background ticks never animate (the class is set only after a `t:`/`pg:` answer).
+- Overflow-proofing: the error view (`.ms`) gets `overflow-wrap:anywhere`; the accordion's detail line is
+  clamped to 2 lines (`.ac .n{max-height:2.7em}`) — a 140-char line wrapped to 4 lines and pushed the
+  open page to 570 px at 320 (now 529); the pager is one flex group (`.pg`, `margin-left:auto`) so «›» no
+  longer wraps alone to a third line.
+- Byte budget (4 052 → 4 089 with the slide): dropped `button:active` scale, `stroke-linecap:round`,
+  `line-height` on `.nm`, the sparkline pre-fill (the line simply appears from the second sample), «Нет
+  активных задач» → «Нет задач», `toLocaleTimeString('ru')` → `toTimeString().slice(0,8)`; sprite hidden
+  with `.df{display:none}`.
+- Caption below: `body{margin:12px 14px}` + the client's default bottom padding (0 with a caption below).
+- `mock.json`: top-level `caption`; #6 «Стресс» (36-char names without spaces at the cap, `<`/`&` in a
+  name, 5 tabs incl. «Ошибка», page 50 / 99, disk 99 % full, 60-char save path without digits, 140-char
+  detail line); #7 «Стресс · ошибка без пробелов»; #4's `bg` rejection is delayed 1,8 s.
+- Size: 8 310 B raw / **4 089 B** zlib-9. Heights at 320: 524 (6 rows, 5 tabs on 2 lines), 529 open.

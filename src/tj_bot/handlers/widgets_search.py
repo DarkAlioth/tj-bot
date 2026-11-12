@@ -727,7 +727,10 @@ async def close_sheet(
         await answer_error(query, STALE_QUERY_TEXT)
         return
     await answer_json(query, {"ok": 1})
-    await close_widget(bot, repo, row)
+    if not await close_widget(bot, repo, row):
+        await finish_widget(
+            bot, repo, row, done_state(str(row.context["qh"]), row.rev + 1, "Закрыто")
+        )
 
 
 @widgets_search_router.widget_query(Verb("f"))

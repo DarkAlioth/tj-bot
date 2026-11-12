@@ -35,3 +35,18 @@ Russian copy ≈ 600 B of the 4 072 (473 non-ASCII chars); CSS (44 rules) ≈ 1 
 - `request()` only inside the click handler (synchronous) or as a background tick in the private chat; one in flight at a time; ticks ≥ 5 s apart and stopped on `deactivated`.
 - `touch-action` left at auto everywhere (no horizontal controls); controls start ≥ 14 px from the left edge, tiles are not gesture-claiming.
 - Body padding keeps `env(safe-area-inset-bottom)` clear; the bot sends a caption anyway.
+
+## QA pass 2026-11-12
+
+- Tab switch animates: `#c` slides in 200 ms (`.an`, `translateX(24px)` → 0, restarted with one layout
+  read); `bg` ticks still re-render in place without animation. Direction-following slide was tried and
+  dropped for size (−45 B).
+- Overflow-proofing: expanded indexer errors wrap with `overflow-wrap:anywhere`; the 7-day grid uses
+  `repeat(7,minmax(0,1fr))` so 4-digit days cannot widen a column past the bubble.
+- Reduced motion: `!important` rule.
+- Byte budget (4 072 → 4 088): `toLocaleTimeString(…)` → `toTimeString().slice(0,5)`, `cursor:pointer`,
+  `*{box-sizing}` (buttons are border-box by default), «Проверяю… до 30 с» → «Проверяю…», «Не дождался
+  ответа» → ERR.TIMEOUT «Бот не ответил», `.nm` margin.
+- `mock.json`: #7–#9 «Стресс» (100-day uptime, disk 98 % full, 3 indexers down with 40-char errors incl.
+  one without spaces, 8 × 24-char top queries, 5-digit counters); #6's `bg` TIMEOUT is delayed 1,8 s.
+- Size: 9 419 B raw / **4 088 B** zlib-9. Height ≤ 473 px at 320 in every tab.

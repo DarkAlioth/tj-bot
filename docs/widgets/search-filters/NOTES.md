@@ -2,62 +2,64 @@
 
 ## 1. What it is
 
-The filter sheet that did not fit into the search card (card NOTES §1: sheet ≈ 550 B compressed).
-Own HTML: **5 221 B raw / 2 619 B zlib-9** (cap 4 096, aim 2 500 — the 120 B over the aim are the
-in-place class toggling and the sessionStorage mirror, both worth keeping). Same family look as the
-card and the list: `.g` ghost, `.c` chips, `.ac` accent, `.m` meta, `.hd` uppercase section
-headings (BRIEF typography), `.dots` pulse, error map.
+The filter sheet that did not fit into the search card. Own HTML: **5 470 B raw / 2 709 B zlib-9**
+(cap 4 096). Same family look as the card and the list: `.g` ghost, `.c` chips, `.ac` accent, `.m` meta,
+`.hd` uppercase section headings, `.dots` pulse, error map.
 
-Heights (harness, 320 px): defaults 482 px, 10 categories at caps 534 px, no categories 315 px,
-done ~60 px. With the client's 22 px time band: +12 px → 546 px worst case (≤ 560). Checked at
-320/360/430, dark/light (`shots/`).
+## 2. Real-device round (2026-11-12) — what changed
 
-## 2. Layout decisions
+- **«Закрыть» ghost chip** in the header, right of the «Фильтры» title → request `x`; pending = dots in
+  the chip. The bottom row stays «Сбросить» + «Применить» (a third button there did not fit 320 px).
+- **New apply flow**: «Применить» → `f:…` → `{"ok":1}` → the widget clears its `sessionStorage` entry
+  and stays as is; the bot sends a fresh card below and deletes the sheet. The done line «✓ Применено:
+  …» / «✓ Закрыто» is the fallback (mock scenarios 1 and 3). `rq()` is now shared by `f` and `x`.
+- **No overflow**: `*{min-width:0}`, `body{overflow-wrap:anywhere}`, ellipsis on every button; category
+  chips are flex rows (label `.el` shrinks, count `flex:none`) — with plain inline-block buttons the count
+  was pushed outside the chip (audit: `i [outside 12]`). 20-char no-space labels and 6-digit counts
+  (mock scenario 7) ellipsise inside the chip. Bottom padding includes
+  `var(--tg-content-safe-area-inset-bottom,0px)` so the stand shows the client's 22 px band.
 
-- Header «Фильтры» + the live summary «Активно: …» (hint, wraps to 2 lines max, `max-height` clamp).
-- Category chips in a **grid** (2 columns, 3 from 400 px) instead of flex-wrap: ten 18-char labels
-  wrapped to one chip per row at 320 px and the sheet hit 678 px (clipped). The grid bounds it to
-  5 rows (180 px); long labels get a single-line ellipsis inside the chip, the count stays visible.
-  `repeat(auto-fill, minmax())` was avoided in favour of a width `@media` (explicitly in-profile).
-- Three segmented controls: a secondary-bg track with 2 px gaps, transparent segments, the active one
-  in button colour (`button.ac` — specificity had to beat `.sg button`, the first draft showed no
-  active segment at all). Five size segments fit 320 px at `.78em` with 3 px padding.
+Heights (stand, 22 px band, 320 px): defaults 503 px, 10 categories at caps 555, no categories 336,
+done 150 (stand minimum); 430 px: 503 → 451 (3-column grid). Audit at 320/360/430: no problems.
+
+## 3. Layout decisions
+
+- Header «Фильтры» + «Закрыть»; live summary «Активно: …» (hint, 2-line clamp).
+- Category chips in a **grid** (2 columns, 3 from 400 px): ten 18-char labels in a flex-wrap hit 678 px.
+  The grid bounds it to 5 rows; long labels get a single-line ellipsis, the count stays visible.
+- Three segmented controls: a secondary-bg track with 2 px gaps, transparent segments, the active one in
+  button colour (`button.ac` beats `.sg button`). Five size segments fit 320 px at `.78em`.
 - Buttons: «Сбросить» ghost (fixed width) + «Применить» primary (flex 1). Error/transport text in a
   footer line under the buttons, destructive colour, persistent until the next tap.
-- Done state: «✓ Применено: …» one or two lines, hint colour, nothing else.
 
-## 3. Behaviour
+## 4. Behaviour
 
-- Taps never rebuild the DOM: `mark()` toggles `.ac` on every `[data-a]` by comparing with the
-  working selection, so the background transition (.15 s) plays and nothing jumps. `draw()` runs
-  only on load, reset, state change and done.
-- Working selection `w=[se,sz,dt]`, `wc=token`; saved to `sessionStorage` under
-  `sf:<qh>:<f>:<c>` after every tap; restored on load when the key matches (verified with a page
-  reload in the harness: «Активно: Фильмы HD · сиды 10+» survives). Cleared on a successful apply.
-- «Применить» → `f:<ctx>:<code>:<cat>`; the button shows the 3-dot pulse, every control loses
-  pointer events until the answer. `{"err"}` keeps the controls and shows the text; a done answer
-  redraws as one line; `chatDataChanged` with a newer `r` does the same.
+- Taps never rebuild the DOM: `mark()` toggles `.ac` on every `[data-a]`; `draw()` runs only on load,
+  state change and done.
+- Working selection `w=[se,sz,dt]`, `wc=token`; saved to `sessionStorage` under `sf:<qh>:<f>:<c>` after
+  every tap; restored on load when the key matches; cleared on a successful apply (`ok` or done).
+- «Применить» → `f:<ctx>:<code>:<cat>`; «Закрыть» → `x`; every control loses pointer events until the
+  answer. `{"err"}` keeps the controls and shows the text; `{"ok":1}` does nothing visible; a state with
+  `v`/`done` redraws (`fin()`); `chatDataChanged` with a newer `r` does the same.
 - Haptics: `selectionChanged` per segment/chip tap, `impactOccurred('light')` on reset,
   `notificationOccurred` success/error on the answer. All guarded.
 
-## 4. Tried / rejected
+## 5. Tried / rejected
 
-- One request per tap (bot-side cycling like today's 🔁 buttons) — rejected: latency on every tap,
-  5 requests to set 3 filters, and the BUSY window; local selection + one apply is the Widgets way.
-- Disabling «Применить» when nothing changed — dropped (12 B of logic, and "apply the same" is a
-  harmless no-op the user may want after an error).
-- Showing `n` in the header — the «Все 302» chip already carries it.
-- Flex-wrap chips — see §2 (clipped at 10 long labels).
+- One request per tap (bot-side cycling) — rejected: latency on every tap, 5 requests to set 3 filters.
+- «Закрыть» as a third bottom button — «Закрыть» + «Сбросить» + «Применить» did not fit 320 px without
+  ellipsis; the header slot is the sheet idiom anyway.
+- Flex-wrap chips — clipped at 10 long labels (see §3).
 
-## 5. widget-rules.md checklist
+## 6. widget-rules.md checklist
 
 - No form controls (segments and chips are `<button>`s), no images, no external resources, no
-  `:checked`/`:focus`, no nesting, no `:has()`, no `vh`.
-- Colours: theme variables only. No opacity, no filters → 0 heavy elements.
-- 1 `@keyframes`; transitions on `background`/`color`/`transform` only; `prefers-reduced-motion`
-  turns them off.
+  `:checked`/`:focus`, no nesting, no `:has()`, no `vh`; `max()` with `env()`/`var()` is in profile.
+- Colours: theme variables only. No opacity, no filters → 0 heavy elements. 1 `@keyframes`.
 - `request()` synchronously in the click handler; one request at a time (`busy` + `.p [data-a]`).
-- `sessionStorage` reads/writes wrapped in try/catch (private window / quota).
-- `env(safe-area-inset-bottom)` padding with `body{margin:0}`; the footer line is short so the time
-  corner stays clear.
-- 29 CSS rules, ≈ 60 nodes.
+- `sessionStorage` reads/writes wrapped in try/catch.
+- `env(safe-area-inset-bottom)` padding with `body{margin:0}`; the footer line is short, the «Закрыть»
+  chip is at the top — nothing tappable near the time corner.
+- 31 CSS rules, ≈ 65 nodes.
+
+`mock.json` was edited directly in the real-device round (new `x` answers, `ok` flow, stress scenario); `shots/mock_gen.py` predates it and would overwrite those changes — do not run it without porting them.

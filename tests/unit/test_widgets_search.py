@@ -1022,3 +1022,11 @@ async def test_close_deletes_a_list_or_sheet_and_rejects_other_widgets() -> None
     await close_sheet(make_query("x", bot, CARD_MID), [], repo, bot)
     assert answer(bot) == {"err": STALE_QUERY_TEXT}
     bot.delete_message.assert_not_awaited()
+
+    bot.reset_mock()
+    bot.delete_message.side_effect = TelegramBadRequest(
+        method=SendMessage(chat_id=1, text="x"), message="message can't be deleted"
+    )
+    await close_sheet(make_query("x", bot, LIST_MID), [], repo, bot)
+    assert answer(bot) == {"ok": 1}
+    assert edited_state(bot, LIST_MID)["done"] == "Закрыто"

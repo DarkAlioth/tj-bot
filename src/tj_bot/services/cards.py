@@ -24,7 +24,6 @@ from tj_bot.db.filters import (
     category_token,
 )
 from tj_bot.db.models import Torrent
-from tj_bot.widgets.state import dumps_state
 from tj_bot.services.enrichment import CardMeta
 from tj_bot.widgets.state import MAX_STATE_BYTES
 
@@ -360,7 +359,8 @@ def more_answer(meta: CardMeta, torrent: Torrent) -> dict[str, str]:
         answer["pp"] = people
     if not answer:
         return {"err": "Описание недоступно"}
-    if len(dumps_state(answer).encode("utf-8")) > MORE_ANSWER_BYTES:
+    packed = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
+    if len(packed.encode("utf-8")) > MORE_ANSWER_BYTES:
         answer.pop("pp", None)
     return answer
 

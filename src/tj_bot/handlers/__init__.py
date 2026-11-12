@@ -8,6 +8,7 @@ from tj_bot.handlers.qbit_console import qbit_router
 from tj_bot.handlers.server_download import server_download_router
 from tj_bot.handlers.user import user_router
 from tj_bot.handlers.users import users_router
+from tj_bot.handlers.widgets_hub import hub_router
 
 routers_list = [
     errors_router,
@@ -16,6 +17,7 @@ routers_list = [
     users_router,
     admin_router,
     server_download_router,
+    hub_router,  # widget /start, /history, /favorites; classic users fall through
     favorites_router,
     user_router,
     inline_router,

@@ -46,3 +46,19 @@ def test_summary_readable() -> None:
     assert ResultFilters().summary() == "не заданы"
     s = ResultFilters(seeders=1, size=2).summary()
     assert "сиды" in s and "размер" in s
+
+
+async def test_widget_user_filter_reads_the_classic_flag() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from tj_bot.filters.widgets import WidgetUser
+
+    repo = AsyncMock()
+    event = MagicMock()
+    event.from_user.id = 5
+    repo.uses_classic_ui.return_value = False
+    assert await WidgetUser()(event, repo) is True
+    repo.uses_classic_ui.return_value = True
+    assert await WidgetUser()(event, repo) is False
+    event.from_user = None
+    assert await WidgetUser()(event, repo) is False

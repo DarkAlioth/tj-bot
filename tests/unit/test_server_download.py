@@ -420,3 +420,46 @@ async def test_begin_torrent_send_reports_never_listed_torrent(
     )
 
     assert "не принял" in query.answer.await_args.args[0]
+
+
+async def test_begin_torrent_send_from_a_widget_reports_into_the_chat() -> None:
+    """``query=None`` (widget flows): errors go to the chat, nothing is acked."""
+    message = make_message()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.side_effect = JackettError("down")
+
+    await begin_torrent_send(
+        None,
+        cast(Message, message),
+        AsyncMock(spec=TorrentRepo),
+        jackett,
+        make_qbit(),
+        make_config(),
+        "Movie",
+        "http://jackett:9117/dl/1",
+    )
+
+    assert "Не удалось получить файл" in message.answer.await_args.args[0]
+
+
+async def test_begin_torrent_send_from_a_widget_opens_the_picker() -> None:
+    message = make_message()
+    message.answer.return_value = make_message()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.return_value = b"torrentbytes"
+    qbit = make_qbit()
+
+    await begin_torrent_send(
+        None,
+        cast(Message, message),
+        AsyncMock(spec=TorrentRepo),
+        jackett,
+        qbit,
+        make_config(),
+        "Movie",
+        "http://jackett:9117/dl/1",
+    )
+
+    qbit.add_torrent_file.assert_awaited_once()
+    status = message.answer.return_value
+    assert "Выбрано" in status.edit_text.await_args.args[0]

@@ -18,7 +18,7 @@ from typing import Any
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import BaseFilter, Command, CommandObject
+from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -28,6 +28,7 @@ from tj_bot.config import AppConfig
 from tj_bot.db.models import WidgetMessage
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
+from tj_bot.filters.widgets import WidgetKind, WidgetUser
 from tj_bot.handlers.user import SEARCHING_TEXT
 from tj_bot.handlers.widgets_search import run_widget_search
 from tj_bot.services import broadcaster
@@ -90,31 +91,6 @@ ERR_ADMIN_BLOCK = "Сначала снимите админа"
 ERR_SUPER_ROLE = "Супер-админ задан в .env"
 ERR_SELF_ROLE = "Нельзя изменить свою роль"
 ERR_DRAFT_CLOSED = "Черновик уже закрыт"
-
-
-class WidgetUi(BaseFilter):
-    """Admins on the widget UI; the classic-UI flag sends the rest downstream."""
-
-    async def __call__(self, message: Message, repo: TorrentRepo) -> bool:
-        user = message.from_user
-        return user is not None and not await repo.uses_classic_ui(user.id)
-
-
-class WidgetKind(BaseFilter):
-    """Match the queried message's recorded widget kind; passes ``widget``."""
-
-    def __init__(self, *kinds: str) -> None:
-        self.kinds = frozenset(kinds)
-
-    async def __call__(
-        self, query: WidgetQuery, repo: TorrentRepo
-    ) -> bool | dict[str, Any]:
-        if query.chat is None or query.message_id is None:
-            return False
-        widget = await repo.get_widget_message(query.chat.id, query.message_id)
-        if widget is None or widget.kind not in self.kinds:
-            return False
-        return {"widget": widget}
 
 
 class Cached[T]:
@@ -237,7 +213,7 @@ async def build_dashboard(
     return state, caption, context
 
 
-@widgets_admin_router.message(Command("health", "stats", "indexers"), WidgetUi())
+@widgets_admin_router.message(Command("health", "stats", "indexers"), WidgetUser())
 async def show_dashboard(
     message: Message,
     command: CommandObject,
@@ -443,7 +419,7 @@ async def build_users(
     return state, users_caption(counts, page, pages), {"g": group, "p": page}
 
 
-@widgets_admin_router.message(Command("users"), WidgetUi())
+@widgets_admin_router.message(Command("users"), WidgetUser())
 async def show_users(
     message: Message, bot: Bot, repo: TorrentRepo, config: AppConfig
 ) -> None:
@@ -616,7 +592,7 @@ def broadcast_context(
     }
 
 
-@widgets_admin_router.message(Command("broadcast"), WidgetUi())
+@widgets_admin_router.message(Command("broadcast"), WidgetUser())
 async def broadcast_draft(
     message: Message, command: CommandObject, bot: Bot, repo: TorrentRepo
 ) -> None:

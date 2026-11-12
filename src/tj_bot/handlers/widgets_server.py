@@ -16,12 +16,13 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import BaseFilter, Command
+from aiogram.filters import Command
 from aiogram.types import Message
 
 from tj_bot.db.models import WidgetMessage
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
+from tj_bot.filters.widgets import WidgetKind, WidgetUser
 from tj_bot.handlers.qbit_console import NOT_CONFIGURED_TEXT
 from tj_bot.services import qbit_views as views
 from tj_bot.services.formatting import padded
@@ -55,31 +56,6 @@ PRIORITY_ACTIONS = {
     "bottom": "bottomPrio",
 }
 HASH_PREFIX = re.compile(r"[0-9a-f]{8}")
-
-
-class WidgetUi(BaseFilter):
-    """Users on the widget UI (the classic text flows serve the others)."""
-
-    async def __call__(self, message: Message, repo: TorrentRepo) -> bool:
-        user = message.from_user
-        return user is not None and not await repo.uses_classic_ui(user.id)
-
-
-class Kind(BaseFilter):
-    """The query comes from one of our widgets; passes its ``widget`` record."""
-
-    def __init__(self, *kinds: str) -> None:
-        self.kinds = frozenset(kinds)
-
-    async def __call__(
-        self, query: WidgetQuery, repo: TorrentRepo
-    ) -> bool | dict[str, Any]:
-        if query.chat is None or query.message_id is None:
-            return False
-        widget = await repo.get_widget_message(query.chat.id, query.message_id)
-        if widget is None or widget.kind not in self.kinds:
-            return False
-        return {"widget": widget}
 
 
 def _now() -> int:
@@ -187,7 +163,9 @@ def _selection(
     return (files, views.toggle_priority(files)) if files else None
 
 
-@widgets_server_router.widget_query(Verb("tg", "tf", "qp", "all", "none"), Kind(PICKER))
+@widgets_server_router.widget_query(
+    Verb("tg", "tf", "qp", "all", "none"), WidgetKind(PICKER)
+)
 async def picker_select(
     query: WidgetQuery,
     verb: str,
@@ -239,7 +217,7 @@ async def picker_select(
     )
 
 
-@widgets_server_router.widget_query(Verb("pg"), Kind(PICKER))
+@widgets_server_router.widget_query(Verb("pg"), WidgetKind(PICKER))
 async def picker_turn_page(
     query: WidgetQuery,
     args: list[str],
@@ -268,7 +246,7 @@ async def picker_turn_page(
     )
 
 
-@widgets_server_router.widget_query(Verb("go"), Kind(PICKER))
+@widgets_server_router.widget_query(Verb("go"), WidgetKind(PICKER))
 async def picker_start(
     query: WidgetQuery,
     widget: WidgetMessage,
@@ -305,7 +283,7 @@ async def picker_start(
     await send_progress_widget(bot, widget.chat_id, repo, started, selected, total)
 
 
-@widgets_server_router.widget_query(Verb("x"), Kind(PICKER))
+@widgets_server_router.widget_query(Verb("x"), WidgetKind(PICKER))
 async def picker_cancel(
     query: WidgetQuery,
     widget: WidgetMessage,
@@ -409,7 +387,7 @@ async def _progress_gone(bot: Bot, repo: TorrentRepo, widget: WidgetMessage) -> 
     await _edit_caption(bot, widget, views.progress_caption(state))
 
 
-@widgets_server_router.widget_query(Verb("bg", "rf"), Kind(PROGRESS))
+@widgets_server_router.widget_query(Verb("bg", "rf"), WidgetKind(PROGRESS))
 async def progress_refresh(
     query: WidgetQuery,
     widget: WidgetMessage,
@@ -436,7 +414,7 @@ async def progress_refresh(
     await _progress_sync(bot, repo, widget, info)
 
 
-@widgets_server_router.widget_query(Verb("pa", "re", "fo", "rc"), Kind(PROGRESS))
+@widgets_server_router.widget_query(Verb("pa", "re", "fo", "rc"), WidgetKind(PROGRESS))
 async def progress_control(
     query: WidgetQuery,
     verb: str,
@@ -476,7 +454,7 @@ async def progress_control(
     await _progress_sync(bot, repo, widget, info, force=True)
 
 
-@widgets_server_router.widget_query(Verb("del"), Kind(PROGRESS))
+@widgets_server_router.widget_query(Verb("del"), WidgetKind(PROGRESS))
 async def progress_delete(
     query: WidgetQuery,
     args: list[str],
@@ -500,7 +478,7 @@ async def progress_delete(
     await _progress_gone(bot, repo, widget)
 
 
-@widgets_server_router.widget_query(Verb("con"), Kind(PROGRESS))
+@widgets_server_router.widget_query(Verb("con"), WidgetKind(PROGRESS))
 async def progress_console(
     query: WidgetQuery,
     widget: WidgetMessage,
@@ -567,7 +545,7 @@ async def send_console_widget(
     )
 
 
-@widgets_server_router.message(Command("dl"), WidgetUi())
+@widgets_server_router.message(Command("dl"), WidgetUser())
 async def console_command(
     message: Message, repo: TorrentRepo, qbit: QbittorrentClient | None, bot: Bot
 ) -> None:
@@ -577,7 +555,7 @@ async def console_command(
     await send_console_widget(bot, message.chat.id, repo, qbit)
 
 
-@widgets_server_router.widget_query(Verb("bg", "rf", "t", "pg"), Kind(CONSOLE))
+@widgets_server_router.widget_query(Verb("bg", "rf", "t", "pg"), WidgetKind(CONSOLE))
 async def console_view(
     query: WidgetQuery,
     verb: str,
@@ -614,7 +592,7 @@ async def console_view(
     )
 
 
-@widgets_server_router.widget_query(Verb("x"), Kind(CONSOLE))
+@widgets_server_router.widget_query(Verb("x"), WidgetKind(CONSOLE))
 async def console_details(
     query: WidgetQuery, args: list[str], qbit: QbittorrentClient | None
 ) -> None:
@@ -633,7 +611,7 @@ async def console_details(
     await answer_json(query, views.console_details(torrent))
 
 
-@widgets_server_router.widget_query(Verb("pa", "re", "fo", "pr"), Kind(CONSOLE))
+@widgets_server_router.widget_query(Verb("pa", "re", "fo", "pr"), WidgetKind(CONSOLE))
 async def console_control(
     query: WidgetQuery,
     verb: str,
@@ -690,7 +668,7 @@ async def console_control(
     )
 
 
-@widgets_server_router.widget_query(Verb("del", "alt", "sa", "ra"), Kind(CONSOLE))
+@widgets_server_router.widget_query(Verb("del", "alt", "sa", "ra"), WidgetKind(CONSOLE))
 async def console_bulk(
     query: WidgetQuery,
     verb: str,
@@ -741,7 +719,7 @@ async def console_bulk(
     )
 
 
-@widgets_server_router.widget_query(Verb("fi"), Kind(CONSOLE))
+@widgets_server_router.widget_query(Verb("fi"), WidgetKind(CONSOLE))
 async def console_files(
     query: WidgetQuery,
     args: list[str],

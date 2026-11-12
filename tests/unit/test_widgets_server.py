@@ -8,6 +8,7 @@ from aiogram.types import Message
 
 from tj_bot.db.models import WidgetMessage
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.filters.widgets import WidgetKind, WidgetUser
 from tj_bot.handlers import widgets_server as ws
 from tj_bot.services.qbittorrent import (
     QbittorrentClient,
@@ -163,16 +164,16 @@ async def test_kind_filter_passes_the_widget_record() -> None:
     widget = picker_widget()
     repo.get_widget_message.return_value = widget
 
-    assert await ws.Kind("picker", "progress")(make_query("tg:1", bot), repo) == {
+    assert await WidgetKind("picker", "progress")(make_query("tg:1", bot), repo) == {
         "widget": widget
     }
-    assert await ws.Kind("console")(make_query("tg:1", bot), repo) is False
+    assert await WidgetKind("console")(make_query("tg:1", bot), repo) is False
     repo.get_widget_message.return_value = None
-    assert await ws.Kind("picker")(make_query("tg:1", bot), repo) is False
+    assert await WidgetKind("picker")(make_query("tg:1", bot), repo) is False
     shared = WidgetQuery.model_validate(
         {"id": "q", "from": USER, "chat_instance": "ci", "data": "x"}
     )
-    assert await ws.Kind("picker")(shared, repo) is False
+    assert await WidgetKind("picker")(shared, repo) is False
 
 
 async def test_widget_ui_filter_excludes_classic_users() -> None:
@@ -181,11 +182,11 @@ async def test_widget_ui_filter_excludes_classic_users() -> None:
     message.from_user = MagicMock(id=111)
 
     repo.uses_classic_ui.return_value = False
-    assert await ws.WidgetUi()(message, repo) is True
+    assert await WidgetUser()(message, repo) is True
     repo.uses_classic_ui.return_value = True
-    assert await ws.WidgetUi()(message, repo) is False
+    assert await WidgetUser()(message, repo) is False
     message.from_user = None
-    assert await ws.WidgetUi()(message, repo) is False
+    assert await WidgetUser()(message, repo) is False
 
 
 # --- picker -------------------------------------------------------------------

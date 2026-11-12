@@ -16,6 +16,7 @@ import tj_bot.handlers.widgets_admin as wa
 from tj_bot.config import AppConfig
 from tj_bot.db.models import BotUser, WidgetMessage
 from tj_bot.db.repo import SearchStats, TorrentRepo
+from tj_bot.filters.widgets import WidgetKind, WidgetUser
 from tj_bot.handlers.user import SEARCHING_TEXT
 from tj_bot.services.admin_views import QbitSummary
 from tj_bot.services.monitor import IndexerStatus, MonitorState, indexer_problem
@@ -187,11 +188,11 @@ async def test_widget_ui_filter_follows_the_classic_flag() -> None:
     repo = make_repo()
     message = make_message()
 
-    assert await wa.WidgetUi()(message, repo) is True
+    assert await WidgetUser()(message, repo) is True
     repo.uses_classic_ui.return_value = True
-    assert await wa.WidgetUi()(message, repo) is False
+    assert await WidgetUser()(message, repo) is False
     message.from_user = None
-    assert await wa.WidgetUi()(message, repo) is False
+    assert await WidgetUser()(message, repo) is False
 
 
 async def test_widget_kind_filter_passes_the_record() -> None:
@@ -199,10 +200,10 @@ async def test_widget_kind_filter_passes_the_record() -> None:
     widget = make_widget("users", {})
     repo.get_widget_message.return_value = widget
 
-    assert await wa.WidgetKind("users")(make_query("t:a"), repo) == {"widget": widget}
-    assert await wa.WidgetKind("dashboard")(make_query("bg"), repo) is False
+    assert await WidgetKind("users")(make_query("t:a"), repo) == {"widget": widget}
+    assert await WidgetKind("dashboard")(make_query("bg"), repo) is False
     repo.get_widget_message.return_value = None
-    assert await wa.WidgetKind("users")(make_query("t:a"), repo) is False
+    assert await WidgetKind("users")(make_query("t:a"), repo) is False
     headless = WidgetQuery.model_validate(
         {
             "id": "q",
@@ -211,7 +212,7 @@ async def test_widget_kind_filter_passes_the_record() -> None:
             "data": "bg",
         }
     )
-    assert await wa.WidgetKind("users")(headless, repo) is False
+    assert await WidgetKind("users")(headless, repo) is False
 
 
 async def test_cached_reloads_only_after_the_ttl(

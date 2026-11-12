@@ -13,11 +13,11 @@ from tj_bot.config import AppConfig
 from tj_bot.db.filters import category_token
 from tj_bot.db.models import SearchQuery, Torrent, WidgetMessage
 from tj_bot.db.repo import TorrentData, TorrentRepo
+from tj_bot.filters.widgets import WidgetUser
 from tj_bot.handlers import widgets_search
 from tj_bot.handlers.user import STALE_QUERY_TEXT, Hst, Upd
 from tj_bot.handlers.widgets_search import (
     Ctx,
-    WidgetUi,
     apply_enrichment,
     apply_filters,
     card_navigate,
@@ -197,11 +197,11 @@ async def test_widget_ui_filter_follows_the_classic_flag() -> None:
     event = MagicMock()
     event.from_user.id = 5
 
-    assert await WidgetUi()(event, repo) is True
+    assert await WidgetUser()(event, repo) is True
     repo.uses_classic_ui.return_value = True
-    assert await WidgetUi()(event, repo) is False
+    assert await WidgetUser()(event, repo) is False
     event.from_user = None
-    assert await WidgetUi()(event, repo) is False
+    assert await WidgetUser()(event, repo) is False
 
 
 def test_parse_ctx() -> None:

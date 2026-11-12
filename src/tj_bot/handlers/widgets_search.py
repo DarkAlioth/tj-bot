@@ -16,7 +16,7 @@ from typing import Any
 
 from aiogram import Bot, F
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.filters import BaseFilter, CommandObject
+from aiogram.filters import CommandObject
 from aiogram.filters.command import Command
 from aiogram.types import (
     BufferedInputFile,
@@ -25,7 +25,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InputMediaPhoto,
     Message,
-    TelegramObject,
 )
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -39,6 +38,7 @@ from tj_bot.db.filters import (
 )
 from tj_bot.db.models import SearchQuery, Torrent, WidgetMessage
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.filters.widgets import WidgetUser
 from tj_bot.handlers.server_download import begin_torrent_send
 from tj_bot.handlers.user import (
     EMPTY_HISTORY_TEXT,
@@ -105,14 +105,6 @@ CLASSIC_ON_TEXT = "Классический режим включён"
 CLASSIC_OFF_TEXT = "Классический режим выключен"
 HEX8 = re.compile(r"[0-9a-f]{8}")
 HASH_PREFIX = re.compile(r"[0-9a-f]{1,40}")
-
-
-class WidgetUi(BaseFilter):
-    """Pass for users who did not switch to the classic text UI."""
-
-    async def __call__(self, event: TelegramObject, repo: TorrentRepo) -> bool:
-        user = getattr(event, "from_user", None)
-        return user is not None and not await repo.uses_classic_ui(user.id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,7 +402,7 @@ async def toggle_classic(message: Message, repo: TorrentRepo) -> None:
     await message.answer(padded(CLASSIC_ON_TEXT if enabled else CLASSIC_OFF_TEXT))
 
 
-@widgets_search_router.message(F.text, Command("s"), WidgetUi())
+@widgets_search_router.message(F.text, Command("s"), WidgetUser())
 async def search_widget(
     message: Message,
     repo: TorrentRepo,
@@ -438,7 +430,7 @@ async def search_widget(
     )
 
 
-@widgets_search_router.message(Command("last"), WidgetUi())
+@widgets_search_router.message(Command("last"), WidgetUser())
 async def repeat_last_widget(
     message: Message,
     repo: TorrentRepo,
@@ -466,7 +458,7 @@ async def repeat_last_widget(
     )
 
 
-@widgets_search_router.callback_query(Hst.filter(), WidgetUi())
+@widgets_search_router.callback_query(Hst.filter(), WidgetUser())
 async def replay_history_widget(
     query: CallbackQuery,
     callback_data: Hst,
@@ -495,7 +487,7 @@ async def replay_history_widget(
     )
 
 
-@widgets_search_router.callback_query(Upd.filter(), WidgetUi())
+@widgets_search_router.callback_query(Upd.filter(), WidgetUser())
 async def refresh_widget(
     query: CallbackQuery,
     callback_data: Upd,

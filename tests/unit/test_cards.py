@@ -216,7 +216,7 @@ def test_more_answer_caps_plot_and_people() -> None:
 
     answer = more_answer(meta, make_torrent())
 
-    assert len(answer["pl"]) <= 360 and answer["pl"].endswith("…")
+    assert len(answer["pl"]) <= 450 and answer["pl"].endswith("…")
     assert answer["pp"] == (
         "Реж. Кристофер Нолан · Киллиан Мёрфи, Эмили Блант, Мэтт Деймон, Роберт Дауни"
     )
@@ -424,3 +424,10 @@ def test_plot_falls_back_to_the_jackett_description() -> None:
     assert "pl" not in search_state(
         make_torrent(description=None), CTX, CardMeta(), rev=1, is_fav=False
     )
+
+
+def test_more_answer_drops_the_cast_when_the_plot_fills_the_answer() -> None:
+    meta = CardMeta(plot="ж" * 600, director="Режиссёр", cast=("Актёр Актёров",) * 4)
+    answer = more_answer(meta, make_torrent())
+    assert len(answer["pl"]) == 450 and "pp" not in answer
+    assert len(json.dumps(answer, ensure_ascii=False).encode()) <= 1024

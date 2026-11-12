@@ -7,7 +7,7 @@ button[disabled]{opacity:1;color:var(--tg-theme-hint-color)}
 .cd .g{background:var(--tg-theme-bg-color)}
 .d{color:var(--tg-theme-destructive-text-color)}
 .w{width:100%;margin-top:10px}
-.pg button{width:40px}
+.pg{display:flex;gap:6px;margin-top:14px}.pg button{width:48px;flex:none}.pg .mt{flex:1;text-align:center;line-height:36px}
 .tb{display:flex;gap:6px;margin-bottom:12px}
 .ch{display:inline-flex;align-items:center;max-width:48%;box-sizing:border-box;padding:2px 9px;border-radius:999px;font-size:.8em;font-weight:600;line-height:1.6;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-subtitle-text-color)}
 .ch span,.q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -50,7 +50,7 @@ button[disabled]{opacity:1;color:var(--tg-theme-hint-color)}
 <script>
 const TW=window.TelegramWidget,$=i=>document.getElementById(i);
 const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи',INVALID_ANSWER:'Ошибка ответа'};
-const OKT={h:'Результаты — ниже ↓',fd:'Файл отправлен'},EMP='сохраняйте из карточки поиска';
+const OKT={h:'Результаты ниже ↓',fd:'Файл отправлен'},EMP='сохраняйте из карточки';
 let S={},R=-1,busy=0,op=0,det={},cf='',tm=0;
 const pj=s=>{try{return JSON.parse(s)}catch(e){}};
 const esc=s=>(s==null?'':s+'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');

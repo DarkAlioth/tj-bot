@@ -5,6 +5,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     ForeignKey,
+    LargeBinary,
     String,
     UniqueConstraint,
     func,
@@ -143,3 +144,27 @@ class WidgetMessage(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class TorrentMetaRow(Base):
+    """Scraped tracker-page data per torrent hash; outlives the result cache."""
+
+    __tablename__ = "torrent_meta"
+
+    hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tracker: Mapped[str] = mapped_column(String(128))
+    details_url: Mapped[str]
+    # ok | error | not_found | challenge | login | unsupported
+    status: Mapped[str] = mapped_column(String(16))
+    fetched_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # Telegram file_id after the first sendPhoto; the prepared JPEG until then
+    poster_file_id: Mapped[str | None]
+    poster_bytes: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # 4×6 ambient mosaic, 12-bit rgb per cell (72 hex), None for generated covers
+    mosaic: Mapped[str | None] = mapped_column(String(72))
+    meta: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb")
+    )
+    error: Mapped[str | None] = mapped_column(String(200))

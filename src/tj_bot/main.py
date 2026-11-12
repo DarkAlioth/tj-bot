@@ -32,6 +32,8 @@ from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
+from tj_bot.services.enrich.service import build_enricher
+from tj_bot.services.enrichment import NullEnricher
 from tj_bot.services.favorites_watcher import favorites_watch_loop
 from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import JackettClient
@@ -135,6 +137,7 @@ async def main(settings: Settings) -> None:
         download_max_bytes=settings.download_max_bytes,
     )
     qbit = await setup_qbittorrent(settings)
+    enricher = build_enricher(settings, session_pool)
     async with session_pool() as session:
         config.dynamic_admins.update(await TorrentRepo(session).admin_user_ids())
 
@@ -142,6 +145,7 @@ async def main(settings: Settings) -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp["jackett"] = jackett
     dp["qbit"] = qbit
+    dp["enricher"] = enricher or NullEnricher()
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
     dp.include_routers(*routers_list)
     dp.update.outer_middleware(WidgetQueryMiddleware(dp))
@@ -184,6 +188,8 @@ async def main(settings: Settings) -> None:
                 )
             )
         )
+    if enricher is not None:
+        await enricher.start()
     try:
         await broadcaster.broadcast(bot, config.admin_ids, padded("Бот был запущен"))
         logger.info("Starting polling")
@@ -195,6 +201,8 @@ async def main(settings: Settings) -> None:
         await jackett.close()
         if qbit is not None:
             await qbit.close()
+        if enricher is not None:
+            await enricher.close()
         await engine.dispose()
 
 

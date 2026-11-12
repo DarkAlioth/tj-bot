@@ -5,6 +5,7 @@ import logging
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from tj_bot.db.meta_repo import MetaRepo
 from tj_bot.db.repo import TorrentRepo
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ async def cleanup_once(
 ) -> int:
     async with session_pool() as session:
         deleted = await TorrentRepo(session).delete_stale(cache_ttl, history_ttl)
+        deleted += await MetaRepo(session).purge_expired()
         await session.commit()
     return deleted
 

@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     alert_recheck_interval_seconds: int = 300
     alert_free_space_gb: int = 10
 
+    # Tracker-page enrichment of search cards: poster, ambient mosaic, metadata
+    enrich_enabled: bool = True
+    # optional http(s) proxy for tracker pages and images (the VPN side)
+    scrape_proxy_url: str | None = None
+    # used only when a tracker answers with a Cloudflare challenge (RuTracker)
+    flaresolverr_url: str = "http://flaresolverr:8191"
+    # Tapochek hides its video sections behind a login; optional, never logged
+    tapochek_username: str | None = None
+    tapochek_password: str | None = None
+    enrich_fetch_timeout_seconds: float = 20
+
     @property
     def qbit_enabled(self) -> bool:
         return bool(self.qbit_url and self.qbit_username and self.qbit_password)

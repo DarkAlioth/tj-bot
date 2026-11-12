@@ -9,9 +9,11 @@ from tj_bot.handlers.server_download import server_download_router
 from tj_bot.handlers.user import user_router
 from tj_bot.handlers.users import users_router
 from tj_bot.handlers.widgets_search import widgets_search_router
+from tj_bot.handlers.widgets_server import widgets_server_router
 
 routers_list = [
     errors_router,
+    widgets_server_router,
     qbit_router,
     admin_info_router,
     users_router,

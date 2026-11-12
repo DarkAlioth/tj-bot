@@ -974,6 +974,7 @@ async def test_send_to_server_requires_admin_and_qbit(
         jackett,
         qbit,
         config,
+        bot,
         make_torrent().title,
         "http://jackett:9117/dl/1",
     )

@@ -940,7 +940,15 @@ async def send_to_server(
         chat=query.chat,
     ).as_(bot)
     await begin_torrent_send(
-        None, message, repo, jackett, qbit, config, torrent.title, torrent.download_url
+        None,
+        message,
+        repo,
+        jackett,
+        qbit,
+        config,
+        bot,
+        torrent.title,
+        torrent.download_url,
     )
 
 

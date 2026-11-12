@@ -1,7 +1,7 @@
 import html
 import logging
 
-from aiogram import F, Router, types
+from aiogram import Bot, F, Router, types
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.callback_data import CallbackData
@@ -272,6 +272,7 @@ async def favorite_to_server(
     jackett: JackettClient,
     qbit: QbittorrentClient | None,
     config: AppConfig,
+    bot: Bot,
 ) -> None:
     message = query.message
     if not config.is_admin(query.from_user.id):
@@ -291,6 +292,7 @@ async def favorite_to_server(
         jackett,
         qbit,
         config,
+        bot,
         favorite.title,
         favorite.download_url,
     )

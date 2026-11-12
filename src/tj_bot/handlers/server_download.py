@@ -23,6 +23,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.handlers.widgets_server import send_picker_widget
 from tj_bot.services.download_watcher import watch_download
 from tj_bot.services.feedback import ack_silent, alert_or_message
 from tj_bot.services.formatting import DOWNLOADING_STATES, format_size, padded
@@ -277,6 +278,7 @@ async def begin_torrent_send(
     jackett: JackettClient,
     qbit: QbittorrentClient,
     config: AppConfig,
+    bot: Bot,
     name: str,
     download_url: str,
 ) -> None:
@@ -327,8 +329,41 @@ async def begin_torrent_send(
             await alert_or_message(query, "qBittorrent не принял торрент")
             return
         await ack_silent(query)
-    status = await message.answer(padded("Загружаю список файлов…"))
-    await render_selection(status, qbit, torrent_hash, page=0)
+    await open_picker(message, repo, qbit, bot, torrent_hash, query.from_user.id)
+
+
+async def open_picker(
+    message: Message,
+    repo: TorrentRepo,
+    qbit: QbittorrentClient,
+    bot: Bot,
+    torrent_hash: str,
+    user_id: int,
+    status: Message | None = None,
+) -> None:
+    """The file picker: a widget, or the classic text screen for classic-UI users.
+
+    ``status`` is a placeholder message of the magnet flow: the text picker is
+    drawn into it, the widget flow replaces it.
+    """
+    if await repo.uses_classic_ui(user_id):
+        if status is None:
+            status = await message.answer(padded("Загружаю список файлов…"))
+        await render_selection(status, qbit, torrent_hash, page=0)
+        return
+    try:
+        sent = await send_picker_widget(bot, message.chat.id, repo, qbit, torrent_hash)
+    except QbittorrentError:
+        logger.exception("File picker widget failed")
+        await message.answer(padded(QBIT_DOWN_TEXT + " 🛠"))
+        return
+    if not sent:
+        await message.answer(padded(GONE_TEXT))
+    if status is not None:
+        try:
+            await status.delete()
+        except TelegramAPIError:
+            logger.debug("Magnet status message not deleted")
 
 
 async def begin_magnet_send(
@@ -336,6 +371,7 @@ async def begin_magnet_send(
     repo: TorrentRepo,
     qbit: QbittorrentClient,
     config: AppConfig,
+    bot: Bot,
     url: str,
 ) -> None:
     """Add a magnet, wait for its metadata and open the file picker."""
@@ -368,7 +404,10 @@ async def begin_magnet_send(
         await qbit.stop_torrents(torrent_hash)
     except QbittorrentError:
         logger.debug("Force-stop after metadata failed", exc_info=True)
-    await render_selection(status, qbit, torrent_hash, page=0)
+    user = message.from_user
+    await open_picker(
+        message, repo, qbit, bot, torrent_hash, user.id if user else 0, status
+    )
 
 
 async def _wait_for_metadata(

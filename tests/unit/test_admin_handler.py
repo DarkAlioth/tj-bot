@@ -2,6 +2,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram import Bot
 from aiogram.types import CallbackQuery, Message
 
 from tj_bot.config import AppConfig
@@ -52,6 +53,7 @@ async def test_send_to_server_non_admin_rejected() -> None:
         AsyncMock(spec=JackettClient),
         AsyncMock(spec=QbittorrentClient),
         make_config(admin=False),
+        cast(Bot, AsyncMock()),
     )
 
     assert query.answer.await_args.kwargs.get("show_alert") is True
@@ -69,6 +71,7 @@ async def test_send_to_server_qbit_none_is_noop() -> None:
         AsyncMock(spec=JackettClient),
         None,
         make_config(),
+        cast(Bot, AsyncMock()),
     )
 
     repo.get_torrent_by_hash.assert_not_awaited()
@@ -86,6 +89,7 @@ async def test_send_to_server_opens_file_picker(
         jackett: object,
         qbit: object,
         config: object,
+        bot: object,
         name: str,
         download_url: str,
     ) -> None:
@@ -104,6 +108,7 @@ async def test_send_to_server_opens_file_picker(
         AsyncMock(spec=JackettClient),
         AsyncMock(spec=QbittorrentClient),
         make_config(),
+        cast(Bot, AsyncMock()),
     )
 
     assert started == {"name": "Movie 1080p", "url": "http://jackett:9117/dl/1"}
@@ -114,7 +119,13 @@ async def test_magnet_without_qbit_hints() -> None:
     message.text = "magnet:?xt=urn:btih:abc"
     message.answer = AsyncMock()
 
-    await add_magnet(message, AsyncMock(spec=TorrentRepo), None, make_config())
+    await add_magnet(
+        message,
+        AsyncMock(spec=TorrentRepo),
+        None,
+        make_config(),
+        cast(Bot, AsyncMock()),
+    )
 
     assert "не настроен" in message.answer.await_args.args[0]
 
@@ -123,7 +134,12 @@ async def test_magnet_delegates_to_picker(monkeypatch: pytest.MonkeyPatch) -> No
     seen: dict[str, str] = {}
 
     async def fake_begin(
-        message: object, repo: object, qbit: object, config: object, url: str
+        message: object,
+        repo: object,
+        qbit: object,
+        config: object,
+        bot: object,
+        url: str,
     ) -> None:
         seen["url"] = url
 
@@ -137,6 +153,7 @@ async def test_magnet_delegates_to_picker(monkeypatch: pytest.MonkeyPatch) -> No
         AsyncMock(spec=TorrentRepo),
         AsyncMock(spec=QbittorrentClient),
         make_config(),
+        cast(Bot, AsyncMock()),
     )
 
     assert seen["url"] == "magnet:?xt=urn:btih:abc&dn=Movie"

@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from tj_bot.services import qbit_views as views
+import tj_bot.services.qbit_views as views
 from tj_bot.widgets.state import dumps_state
 
 KB = 1024

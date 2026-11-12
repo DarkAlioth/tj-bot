@@ -3,7 +3,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from aiogram import types
+from aiogram import Bot, types
 from aiogram.types import CallbackQuery, Message
 
 from tj_bot.config import AppConfig
@@ -225,6 +225,7 @@ async def test_favorite_to_server_opens_file_picker(
         jackett: object,
         qbit: object,
         config: object,
+        bot: object,
         name: str,
         download_url: str,
     ) -> None:
@@ -243,6 +244,7 @@ async def test_favorite_to_server_opens_file_picker(
         AsyncMock(spec=JackettClient),
         AsyncMock(spec=QbittorrentClient),
         make_config(admin=True),
+        cast(Bot, AsyncMock()),
     )
 
     assert started["name"] == "Movie 1080p"
@@ -259,6 +261,7 @@ async def test_favorite_to_server_denied_for_users() -> None:
         AsyncMock(spec=JackettClient),
         None,
         make_config(),
+        cast(Bot, AsyncMock()),
     )
 
     assert query.answer.await_args.kwargs.get("show_alert") is True

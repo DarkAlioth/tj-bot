@@ -1,6 +1,6 @@
 import logging
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery, Message
 
 from tj_bot.config import AppConfig
@@ -25,6 +25,7 @@ async def send_to_server(
     jackett: JackettClient,
     qbit: QbittorrentClient | None,
     config: AppConfig,
+    bot: Bot,
 ) -> None:
     message = query.message
     if not config.is_admin(query.from_user.id):
@@ -44,6 +45,7 @@ async def send_to_server(
         jackett,
         qbit,
         config,
+        bot,
         torrent.title,
         torrent.download_url,
     )
@@ -55,8 +57,11 @@ async def add_magnet(
     repo: TorrentRepo,
     qbit: QbittorrentClient | None,
     config: AppConfig,
+    bot: Bot,
 ) -> None:
     if qbit is None:
         await message.answer(padded("qBittorrent не настроен."))
         return
-    await begin_magnet_send(message, repo, qbit, config, (message.text or "").strip())
+    await begin_magnet_send(
+        message, repo, qbit, config, bot, (message.text or "").strip()
+    )

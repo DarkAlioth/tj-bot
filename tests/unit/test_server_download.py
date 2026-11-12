@@ -15,6 +15,7 @@ from tj_bot.handlers.server_download import (
     build_selection_view,
     cancel_download,
     file_display_name,
+    open_picker,
     select_all_files,
     start_download,
     toggle_file,
@@ -45,6 +46,12 @@ def make_config(admin: bool = True) -> AppConfig:
     return cast(AppConfig, config)
 
 
+def make_repo(classic: bool = True) -> AsyncMock:
+    repo = AsyncMock(spec=TorrentRepo)
+    repo.uses_classic_ui.return_value = classic
+    return repo
+
+
 def make_qbit(files: list[dict[str, Any]] | None = None) -> AsyncMock:
     qbit = AsyncMock(spec=QbittorrentClient)
     qbit.torrent_files.return_value = files if files is not None else [make_file(0)]
@@ -58,6 +65,8 @@ def make_message() -> AsyncMock:
     message = AsyncMock(spec=Message)
     message.chat = MagicMock()
     message.chat.id = 777
+    message.from_user = MagicMock()
+    message.from_user.id = 111
     message.message_id = 5
     message.answer = AsyncMock()
     message.edit_text = AsyncMock()
@@ -212,7 +221,7 @@ async def test_non_admin_taps_are_ignored() -> None:
 
 async def test_begin_torrent_send_adds_stopped_and_opens_picker() -> None:
     query = make_query()
-    repo = AsyncMock(spec=TorrentRepo)
+    repo = make_repo()
     jackett = AsyncMock(spec=JackettClient)
     jackett.download.return_value = b"torrentbytes"
     qbit = make_qbit()
@@ -224,6 +233,7 @@ async def test_begin_torrent_send_adds_stopped_and_opens_picker() -> None:
         jackett,
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "Movie 1080p",
         "http://jackett:9117/dl/1",
     )
@@ -247,10 +257,11 @@ async def test_begin_torrent_send_reports_tracker_failure() -> None:
     await begin_torrent_send(
         query,
         cast(Message, query.message),
-        AsyncMock(spec=TorrentRepo),
+        make_repo(),
         jackett,
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "Movie",
         "http://jackett:9117/dl/1",
     )
@@ -270,9 +281,10 @@ async def test_begin_magnet_send_waits_for_metadata(
 
     await begin_magnet_send(
         message,
-        AsyncMock(spec=TorrentRepo),
+        make_repo(),
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "magnet:?xt=urn:btih:abc&dn=Movie",
     )
 
@@ -298,9 +310,10 @@ async def test_begin_magnet_send_times_out_and_cleans_up(
 
     await begin_magnet_send(
         message,
-        AsyncMock(spec=TorrentRepo),
+        make_repo(),
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "magnet:?xt=urn:btih:abc",
     )
 
@@ -357,10 +370,11 @@ async def test_begin_torrent_send_waits_out_add_race(
     await begin_torrent_send(
         query,
         cast(Message, query.message),
-        AsyncMock(spec=TorrentRepo),
+        make_repo(),
         jackett,
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "Movie",
         "http://jackett:9117/dl/1",
     )
@@ -379,10 +393,11 @@ async def test_begin_torrent_send_reuses_existing_torrent() -> None:
     await begin_torrent_send(
         query,
         cast(Message, query.message),
-        AsyncMock(spec=TorrentRepo),
+        make_repo(),
         jackett,
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "Movie",
         "http://jackett:9117/dl/1",
     )
@@ -411,12 +426,111 @@ async def test_begin_torrent_send_reports_never_listed_torrent(
     await begin_torrent_send(
         query,
         cast(Message, query.message),
-        AsyncMock(spec=TorrentRepo),
+        make_repo(),
         jackett,
         qbit,
         make_config(),
+        cast(Bot, AsyncMock()),
         "Movie",
         "http://jackett:9117/dl/1",
     )
 
     assert "не принял" in query.answer.await_args.args[0]
+
+
+async def test_open_picker_sends_the_widget_for_widget_ui_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: dict[str, Any] = {}
+
+    async def fake_send(
+        bot: Any,  # noqa: ANN401  # test double
+        chat_id: int,
+        repo: Any,  # noqa: ANN401
+        qbit: Any,  # noqa: ANN401
+        torrent_hash: str,
+    ) -> bool:
+        sent["chat_id"], sent["hash"] = chat_id, torrent_hash
+        return True
+
+    monkeypatch.setattr("tj_bot.handlers.server_download.send_picker_widget", fake_send)
+    message = make_message()
+    status = make_message()
+    status.delete = AsyncMock()  # Message.delete builds an awaitable method
+
+    await open_picker(
+        cast(Message, message),
+        make_repo(classic=False),
+        make_qbit(),
+        cast(Bot, AsyncMock()),
+        HASH,
+        111,
+        cast(Message, status),
+    )
+
+    assert sent == {"chat_id": 777, "hash": HASH}
+    status.delete.assert_awaited_once()  # the magnet placeholder goes away
+    message.answer.assert_not_awaited()
+
+
+async def test_open_picker_reports_gone_and_qbit_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def gone(*args: Any) -> bool:  # noqa: ANN401  # test double
+        return False
+
+    async def down(*args: Any) -> bool:  # noqa: ANN401  # test double
+        raise QbittorrentError("down")
+
+    message = make_message()
+    monkeypatch.setattr("tj_bot.handlers.server_download.send_picker_widget", gone)
+    await open_picker(
+        cast(Message, message),
+        make_repo(classic=False),
+        make_qbit(),
+        cast(Bot, AsyncMock()),
+        HASH,
+        111,
+    )
+    assert "не найдена" in message.answer.await_args.args[0]
+
+    monkeypatch.setattr("tj_bot.handlers.server_download.send_picker_widget", down)
+    await open_picker(
+        cast(Message, message),
+        make_repo(classic=False),
+        make_qbit(),
+        cast(Bot, AsyncMock()),
+        HASH,
+        111,
+    )
+    assert "недоступен" in message.answer.await_args.args[0]
+
+
+async def test_begin_torrent_send_opens_the_widget_picker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[str] = []
+
+    async def fake_send(*args: Any) -> bool:  # noqa: ANN401  # test double
+        sent.append(args[-1])
+        return True
+
+    monkeypatch.setattr("tj_bot.handlers.server_download.send_picker_widget", fake_send)
+    query = make_query()
+    jackett = AsyncMock(spec=JackettClient)
+    jackett.download.return_value = b"torrentbytes"
+
+    await begin_torrent_send(
+        query,
+        cast(Message, query.message),
+        make_repo(classic=False),
+        jackett,
+        make_qbit(),
+        make_config(),
+        cast(Bot, AsyncMock()),
+        "Movie",
+        "http://jackett:9117/dl/1",
+    )
+
+    assert sent == [HASH]
+    query.message.answer.assert_not_awaited()  # no text placeholder for widgets

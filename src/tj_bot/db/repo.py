@@ -257,7 +257,9 @@ class TorrentRepo:
         stmt = select(SearchQuery.query_text).where(SearchQuery.id == query_id)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
-    async def get_stats(self, window: datetime.timedelta) -> SearchStats:
+    async def get_stats(
+        self, window: datetime.timedelta, top_limit: int = 5
+    ) -> SearchStats:
         cutoff = datetime.datetime.now(datetime.UTC) - window
         torrents = (
             await self.session.execute(select(func.count(Torrent.id)))
@@ -287,7 +289,7 @@ class TorrentRepo:
             )
             .group_by(SearchQuery.query_text)
             .order_by(func.count(SearchEvent.id).desc())
-            .limit(5)
+            .limit(top_limit)
         )
         top = [(row[0], row[1]) for row in (await self.session.execute(top_stmt)).all()]
         return SearchStats(
@@ -297,6 +299,21 @@ class TorrentRepo:
             users_window=users,
             top_queries=top,
         )
+
+    async def search_counts_by_day(self, days: int) -> list[int]:
+        """Searches per UTC calendar day for the last ``days`` days, oldest first."""
+        first = datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(
+            days=days - 1
+        )
+        start = datetime.datetime.combine(first, datetime.time.min, tzinfo=datetime.UTC)
+        day = func.date(func.timezone("UTC", SearchEvent.created_at))
+        stmt = (
+            select(day, func.count(SearchEvent.id))
+            .where(SearchEvent.created_at >= start)
+            .group_by(day)
+        )
+        counts = {row[0]: row[1] for row in (await self.session.execute(stmt)).all()}
+        return [counts.get(first + datetime.timedelta(days=i), 0) for i in range(days)]
 
     async def get_categories(self, query_hash: str) -> list[tuple[str, int]]:
         stmt = (

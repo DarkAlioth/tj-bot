@@ -493,3 +493,38 @@ async def test_classic_ui_flag(session: AsyncSession) -> None:
     assert await repo.uses_classic_ui(5) is True
     await repo.set_classic_ui(404, True)
     assert await repo.uses_classic_ui(404) is False
+
+
+async def test_search_counts_by_day_and_top_limit(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    ids = await repo.upsert_torrents([make_torrent("a")])
+    first = await repo.create_search("q1", ids, query_text="one")
+    second = await repo.create_search("q2", ids, query_text="two")
+    await repo.record_search_event(1, first)
+    await repo.record_search_event(1, first)
+    await repo.record_search_event(2, second)
+    await session.execute(
+        text(
+            "INSERT INTO search_events (user_id, query_id, created_at)"
+            " VALUES (:user_id, :query_id, now() - interval '2 days')"
+        ),
+        {"user_id": 1, "query_id": first},
+    )
+    await session.execute(
+        text(
+            "INSERT INTO search_events (user_id, query_id, created_at)"
+            " VALUES (:user_id, :query_id, now() - interval '30 days')"
+        ),
+        {"user_id": 1, "query_id": first},
+    )
+    await session.commit()
+
+    counts = await repo.search_counts_by_day(7)
+
+    assert len(counts) == 7
+    assert counts[-1] == 3
+    assert counts[-3] == 1
+    assert sum(counts) == 4
+    stats = await repo.get_stats(datetime.timedelta(days=7), top_limit=1)
+    assert stats.top_queries == [("one", 3)]
+    assert len((await repo.get_stats(datetime.timedelta(days=7))).top_queries) == 2

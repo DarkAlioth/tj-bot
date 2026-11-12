@@ -24,6 +24,7 @@ from tj_bot.db.filters import (
     category_token,
 )
 from tj_bot.db.models import Torrent
+from tj_bot.widgets.state import dumps_state
 from tj_bot.services.enrichment import CardMeta
 from tj_bot.widgets.state import MAX_STATE_BYTES
 
@@ -32,7 +33,9 @@ THIN_SPACE = " "
 # full plot reachable through ``more``
 DROP_ORDER = ("pl", "pp", "aa", "ml", "dr", "u", "te")
 TEASER_CHARS = 80
-MORE_PLOT_CHARS = 360
+MORE_PLOT_CHARS = 450
+# answerWidgetQuery carries at most 1024 bytes; the plot wins over the cast
+MORE_ANSWER_BYTES = 1000
 MORE_PEOPLE_CHARS = 100
 LIST_TITLE_CHARS = 36
 LIST_CATEGORIES = 9  # plus «Все»: the sheet holds 10 chips
@@ -355,7 +358,11 @@ def more_answer(meta: CardMeta, torrent: Torrent) -> dict[str, str]:
     people = people_line(meta, MORE_PEOPLE_CHARS, 4)
     if people:
         answer["pp"] = people
-    return answer or {"err": "Описание недоступно"}
+    if not answer:
+        return {"err": "Описание недоступно"}
+    if len(dumps_state(answer).encode("utf-8")) > MORE_ANSWER_BYTES:
+        answer.pop("pp", None)
+    return answer
 
 
 def list_row(torrent: Torrent) -> list[str]:

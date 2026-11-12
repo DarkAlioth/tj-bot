@@ -32,7 +32,7 @@ button{font:inherit;height:36px;padding:0 4px;border:0;border-radius:10px;backgr
 .sp,.b2{flex:1}
 .ms{text-align:center;padding:32px 0;overflow-wrap:anywhere}
 .ac .n{max-height:2.7em;overflow:hidden}
-.pg{display:flex;gap:4px;margin-left:auto}
+.pg{display:flex;margin-top:14px;text-align:center;line-height:36px}.pg>button{width:48px;flex:none}.pg .n{flex:1}
 .sl{animation:s .2s}
 @keyframes s{from{transform:translateX(var(--x))}}
 .w{animation:p 1s infinite}
@@ -59,9 +59,10 @@ function panel(){const t=S.tr,e=S.err,f=t.fs>0,q=f&&t.ft>0,u=q?1-t.fs/t.ft:0;ret
 function tabs(){const c=S.cnt;let h='';if(!S.err&&c.all)for(const k in TABS)if(k!='er'||c.er)h+=B('t:'+k,'c'+(k==S.tab?' on':''),TABS[k]+' '+(c[k]||0));return h}
 function row(r){const s=r[2],k=s[0],v=r[4],h=r[0];return D('s'+hue(s),'<div class="f rw" data-a="x:'+h+'">'+I('pce'.includes(k)?'p':'a',k=='d'?'r':'')+P('nm',esc(r[1]))+P('rt n',('du'.includes(k)&&v>511?(k=='d'?'↓ ':'↑ ')+fV(v):'—')+D('h',k=='d'?fE(r[5]):'uc'.includes(k)?'×'+cm((r[6]||0).toFixed(2)):Math.round(r[3]*100)+'%'))+bar(h,r[3]*100)+'</div>'+(open==h?acc(r):''))}
 function acc(r){const s=r[2],d=det[open],h=r[0],pz='pc'.includes(s[0]);return D('ac',(d?D('h n',esc(d.l))+D('h nm',esc(d.sp)):D('h','…'))+D('f ar',B((pz?'re:':'pa:')+h,'',pz?'Старт':'Пауза')+B('fo:'+h,'','Форс')+B('fi:'+h,'','Файлы'))+D('f ar',cfm==2?B('c:0','','Отмена')+B('del:'+h+':0','d','Без файлов')+B('del:'+h+':1','d','С файлами'):['top','up','down','bottom'].map((p,i)=>B('pr:'+h+':'+p,'q',I('a',(i>1?'r':'')+(i%3?'':' t')))).join('')+P('sp','')+B('c:2','d','Удалить')))}
-function list(){const r=S.rows;if(!r.some(x=>x[0]==open))open=null;return S.err?D('ms',esc(S.err)+'<br>'+B('rf','c on','Повторить')):r.length?r.map(row).join(''):D('ms h','Нет задач')}
-function foot(){const c=S.cnt,n=S.np||1,p=S.pg||0;return TM?P('h'+(TB?' d':''),TM):(S.err?'':B('alt','c'+(S.tr.alt?' on':''),'Тихий режим')+(cfm==1?P('h','Все на паузу?')+B('sa','c on','Да')+B('c:0','c','Нет'):c.dl+c.up>0?B('c:1','c','Пауза всех'):c.all?B('ra','c','Запустить все'):''))+(!S.err&&n>1?P('pg',B('pg:'+(p-1),'c','‹')+P('c n',(p+1)+' / '+n)+B('pg:'+(p+1),'c','›')):'')}
-function draw(){const l=list();document.getElementById('m').innerHTML=panel()+D('f tb',tabs())+D(AN?'sl" style="--x:'+AN*24+'px':'',l)+D('f tb',foot());AN=0;document.body.className=busy?'bz':'';document.body.offsetWidth;for(const b of document.querySelectorAll('[data-k]'))b.style.width=(PV[b.dataset.k]=NV[b.dataset.k])+'%'}
+function list(){const r=S.rows;if(!r.some(x=>x[0]==open))open=null;return S.err?D('ms',esc(S.err)+'<br>'+B('rf','c on','Повтор')):r.length?r.map(row).join(''):D('ms h','Пусто')}
+function foot(){const c=S.cnt;return TM?P('h'+(TB?' d':''),TM):(S.err?'':B('alt','c'+(S.tr.alt?' on':''),'Тихо')+(cfm==1?P('h','На паузу?')+B('sa','c on','Да')+B('c:0','c','Нет'):c.dl+c.up>0?B('c:1','c','Пауза'):c.all?B('ra','c','Запустить'):''))}
+function pgr(){const n=S.np||1,p=S.pg||0;return TM||S.err||n<2?'':P('pg',B('pg:'+(p-1),'c','‹')+P('n',(p+1)+' / '+n)+B('pg:'+(p+1),'c','›'))}
+function draw(){const l=list();document.getElementById('m').innerHTML=panel()+D('f tb',tabs())+D(AN?'sl" style="--x:'+AN*24+'px':'',l)+D('f tb',foot())+pgr();AN=0;document.body.className=busy?'bz':'';document.body.offsetWidth;for(const b of document.querySelectorAll('[data-k]'))b.style.width=(PV[b.dataset.k]=NV[b.dataset.k])+'%'}
 function apply(a){if(a.x)det[a.x.h]=a.x;if(a.tr){H.push([a.tr.d,a.tr.u]);H.length>12&&H.shift()}if(a.rows||a.err)S={cnt:{},tr:{},...a,rows:a.rows||[]};else{Object.assign(S,a);if(a.row){const i=S.rows.findIndex(x=>x[0]==a.row[0]);i<0||(S.rows[i]=a.row)}}}
 function toast(t,bad){TM=t;TB=bad;hap('notificationOccurred',bad?'error':'success');clearTimeout(tt);tt=setTimeout(()=>{TM=0;draw()},bad?2600:1600)}
 function send(d){if(!W||busy)return;busy=1;PB=d=='bg'||d[0]=='x'?0:d;draw();W.request(d).then(a=>{let j={};try{j=JSON.parse(a.result)||{}}catch(e){}done(d,j)},e=>done(d,{err:e&&e.code=='TIMEOUT'?'Бот не ответил':'Ошибка связи',cx:1}))}

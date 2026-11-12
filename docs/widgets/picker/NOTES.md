@@ -75,3 +75,6 @@ remaining ~100 B of headroom is reserved; anything added must remove something.
   names deliberately exceed the protocol caps (28 / 16 / 90) to prove the CSS; the caps stay as they are
   (`mock_gen.py` does not emit this scenario — it is hand-written in `mock.json`).
 - Size: 8 988 B raw / **3 995 B** zlib-9.
+
+## Pager row (2026-11-12)
+The pager is now a full-width row under the list (‹ counter ›, 48 px arrows), like the search card. Stress scenario #8 (names beyond the 28-char cap, deep folders, disk deficit) renders at ~568 px: it is outside the bot's caps on purpose; every in-cap scenario stays ≤ 560 px.

@@ -16,7 +16,7 @@ button:active{transform:scale(.97)}
 .hd{display:flex;align-items:center;margin-top:6px;font-size:.75em;text-transform:uppercase;color:var(--h);font-weight:600}
 .hd b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tm{text-transform:none;font-size:1.13em}
-.ib{width:40px;height:32px;padding:0;background:none;color:var(--a);font-size:2em;line-height:1}
+.pg{display:flex;gap:6px;margin-top:4px}.pg button{width:48px;height:32px;flex:none;padding:0}.ct{flex:1;text-align:center;font-size:.85em;color:var(--h);line-height:32px}
 svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;color:var(--h)}
 .df{display:none}
 #L{transition:transform .11s cubic-bezier(.2,.8,.2,1)}
@@ -67,13 +67,13 @@ let h='<div class=t>'+esc(s.n)+'</div><div class=m>';
 if(s.m!='pick'){A.innerHTML=h+(s.m=='go'?'<span class=ok>Запущено ✓</span> · прогресс ниже':s.m=='x'?'Удалено из qBittorrent':'Нет в qBittorrent')+'</div>';L.innerHTML=B.innerHTML='';return}
 h+='</div><div class="cd'+(ov?' ov':'')+'"><div class=m><span>Выбрано <b>'+s.k+'</b> из '+nf(s.c)+' · <b>'+fS(s.z)+'</b> из '+fS(s.s)+'</span>'+(s.fs<0?'':' · <span class=fr>'+(ov?'не хватает '+fS(s.z-s.fs):'свободно '+fS(s.fs))+'</span>')+'</div><div class=bar><div style="width:'+w.toFixed(1)+'%"></div></div></div>';
 h+='<div class=cs>'+bt('all','Все','ch'+(s.k==s.c?' on':''))+bt('none','Ничего','ch'+(s.k?'':' on'))+s.cl.map(c=>bt('qp:'+c[0],CL[c[0]]+' <span>'+(c[2]&&c[2]<c[1]?c[2]+'/':'')+c[1]+'</span>','ch'+(c[2]==c[1]?' on':''))).join('')+'</div>';
-A.innerHTML=h+'<div class=hd><b'+(to?' class="tm '+to[1]+'">'+to[0]:'>Файлы')+'</b>'+(s.q>1?bt('pv','‹','ib',s.p<1)+(s.p+1)+' / '+s.q+bt('nx','›','ib',s.p>=s.q-1):'')+'</div>';
+A.innerHTML=h+'<div class=hd><b'+(to?' class="tm '+to[1]+'">'+to[0]:'>Файлы')+'</b>'+'</div>';
 let l='',pf=-2;
 s.f.forEach(r=>{const[i,nm,sz,c,sel,fd]=r,d=s.d[fd];
 if(fd!=pf&&d){pf=fd;l+='<div class="r fh'+(d[2]>=d[1]?' s':d[2]?' h':'')+'" data-a="tf:'+fd+'">'+I('fo')+'<span class=nm>'+esc(d[0])+'</span><span class=sz>'+d[2]+'/'+d[1]+'</span><span class=ck>'+(busy=='tf:'+fd?DOTS:I('ok'))+'</span></div>'}
 l+='<div class="r'+(sel?' s':'')+'" data-a="tg:'+i+'">'+I(c in CL?c:'o')+'<span class=nm>'+esc(nm).replace(/S\d{1,2}E\d{1,3}/gi,'<b>$&</b>')+'</span><span class=sz>'+fS(sz)+'</span><span class=ck>'+(busy=='tg:'+i?DOTS:I('ok'))+'</span></div>'});
 L.innerHTML=l;L.classList.toggle('wt',!!busy);
-B.innerHTML='<div class=ft>'+(cf?'<span class="q dg">Удалить из qBittorrent?</span>'+bt('x','Да','g dg')+bt('cf0','Нет','g'):bt('go','Начать загрузку','p',!s.k)+bt('cf1','Отмена','g dg'))+'</div>'}
+B.innerHTML=(s.q>1?'<div class=pg>'+bt('pv','‹','g',s.p<1)+'<span class=ct>'+(s.p+1)+' / '+s.q+'</span>'+bt('nx','›','g',s.p>=s.q-1)+'</div>':'')+'<div class=ft>'+(cf?'<span class="q dg">Удалить из qBittorrent?</span>'+bt('x','Да','g dg')+bt('cf0','Нет','g'):bt('go','Начать загрузку','p',!s.k)+bt('cf1','Отмена','g dg'))+'</div>'}
 function toast(t,c){to=[t,c];draw();clearTimeout(tt);tt=setTimeout(()=>{to=0;draw()},c?3e3:1600)}
 function flip(r){r[4]^=1;S.k+=r[4]?1:-1;S.z+=r[4]?r[2]:-r[2]}
 function req(a,o){if(!TW)return;busy=a;draw();

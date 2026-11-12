@@ -44,7 +44,7 @@ def dumps_answer(payload: dict[str, Any]) -> str:
 
 
 def answer_json(query: WidgetQuery, payload: dict[str, Any]) -> AnswerWidgetQuery:
-    """``answerWidgetQuery`` with a JSON payload (a state, ``{"ok":1}``, ``{"err":…}``)."""
+    """Answer with compact JSON: a state, ``{"ok":1}`` or ``{"err":…}``."""
     return query.answer(dumps_answer(payload))
 
 

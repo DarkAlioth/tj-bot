@@ -254,52 +254,80 @@ def test_tapochek_members_movie_dune_part_two() -> None:
     assert meta.extra["format"] == "MKV"
 
 
-# --- rutracker -------------------------------------------------------------
+# --- rutracker (real pages fetched through FlareSolverr) -------------------
 
 
-def test_rutracker_movie_uses_first_post_only() -> None:
-    meta = rutracker.parse(fixture_html("rutracker", "synthetic_movie"), RT.format(1))
+def test_rutracker_series_full_card_with_season_and_episodes() -> None:
+    meta = rutracker.parse(fixture_html("rutracker", "6601401"), RT.format(6601401))
     assert meta.tracker == "rutracker"
-    assert (meta.title_ru, meta.title_en, meta.year) == (
-        "Планета Дюна",
-        "Planet Dune",
-        2021,
-    )
-    assert meta.poster_urls == [
-        "https://i115.fastpic.org/big/2021/0917/2c/8b1f9f0e5ad4a0b58b96d5b5c33f6a2c.jpg"
-    ]
-    assert meta.screenshots == [  # fastpic thumb -> big, .jpeg -> .jpg
-        "https://i115.fastpic.org/big/2021/0917/3b/8e9c0a1f2b3d4e5f6a7b8c9d0e1f2a3b.jpg",
-        "https://i115.fastpic.org/big/2021/0917/6d/1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d.jpg",
-    ]
-    assert "imgur" not in str(meta.screenshots)  # second post ignored
-    assert meta.genres == ["фантастика", "боевик"]
-    assert meta.countries == ["США"]
-    assert meta.director == "Глен Миллер / Glenn Miller"
-    assert len(meta.cast) == 5
-    assert meta.duration_min == 86
-    assert meta.translation == ["Профессиональный (многоголосый закадровый)"]
-    assert meta.subtitles == ["англ"]
-    assert meta.video == "BDRemux | MPEG-4 AVC, 1920x1080, 23.976 fps, 24.7 Mb/s"
-    assert (meta.imdb_id, meta.kp_id) == ("tt15161850", 4621436)
-    assert meta.extra["format"] == "MKV"
-
-
-def test_rutracker_series_native_title_gives_season_and_episodes() -> None:
-    meta = rutracker.parse(fixture_html("rutracker", "synthetic_series"), RT.format(2))
     assert (meta.title_ru, meta.title_en, meta.year) == (
         "Дюна: Пророчество",
         "Dune: Prophecy",
         2024,
     )
     assert (meta.season, meta.episodes) == (1, "1-6 of 6")
-    assert meta.poster_urls == ["https://imgbox.com/i/poster1234.jpg"]
-    assert meta.countries == ["США", "Канада"]
-    assert len(meta.cast) == 8
-    assert meta.duration_min == 60
+    assert meta.poster_urls == [
+        "http://i124.fastpic.org/big/2024/1118/10/307fec5a7e9a05c068b32e08c88fd610.jpg"
+    ]
+    assert len(meta.screenshots) == 6  # fastpic thumb -> big, .jpeg -> .jpg
+    assert all("fastpic.org/big/" in url for url in meta.screenshots)
+    assert meta.genres == ["фантастика", "боевик", "драма", "приключения"]
+    assert meta.countries == ["США"]
+    assert meta.director == "Анна Ферстер, Джон Камерон, Ричард Дж. Льюис"
+    assert meta.cast[:2] == ["Эмили Уотсон", "Оливия Уильямс"] and len(meta.cast) == 8
+    assert meta.duration_min == 65
+    assert meta.plot is not None
+    assert meta.plot.startswith("Орден «Бене Гессерит» — тайное женское сообщество")
+    assert meta.translation[0] == (
+        'Профессиональный (многоголосый закадровый) студия "Продубляж" по заказу HBO'
+    )
+    assert len(meta.translation) == 6
+    assert meta.subtitles == ["рус", "англ"]
     assert meta.video is not None
-    assert meta.video.startswith("WEB-DL 2160p | HEVC, 3840x1600")
+    assert meta.video.startswith("WEB-DL 2160p | HEVC, ~19,2 Мбит/сек, 3840x1920")
+    assert meta.audio is not None
+    assert meta.audio.startswith("RUS: AC3, 48 kHz, 6 ch, 640 kbps |Продубляж| / RUS: ")
+    assert len(meta.audio) <= 300  # ten tracks on the page; the summary is capped
     assert (meta.imdb_id, meta.kp_id) == ("tt10466872", 1274452)
+    assert meta.extra["format"] == "MKV"
+
+
+def test_rutracker_movie_with_bilingual_director_and_no_ids() -> None:
+    meta = rutracker.parse(fixture_html("rutracker", "6858804"), RT.format(6858804))
+    assert (meta.title_ru, meta.title_en, meta.year) == (
+        "Планета Дюна",
+        "Planet Dune",
+        2021,
+    )
+    assert (meta.season, meta.episodes) == (None, None)
+    assert meta.poster_urls == [
+        "https://i127.fastpic.org/big/2026/0515/9f/263c7f3d18248ab12b05aad3902b279f.jpg"
+    ]
+    assert len(meta.screenshots) == 5
+    assert all("/big/" in url for url in meta.screenshots)
+    assert meta.genres == ["фантастика", "приключения"]
+    assert meta.countries == ["США", "Канада"]
+    assert meta.director == "Гленн Кэмпбелл / Glenn Campbell, Тэмми Клейн / Tammy Klein"
+    assert meta.cast[0] == "Шон Янг" and len(meta.cast) == 8
+    assert meta.duration_min == 86
+    assert meta.translation == ["Любительский (многоголосый закадровый) - AlphaProject"]
+    assert meta.subtitles == ["англ"]
+    assert (
+        meta.video == "BDRemux 1080p | MPEG4 Video (H264) 1920x1080 23.976fps 18.5 Mb/s"
+    )
+    assert meta.audio is not None
+    assert meta.audio.startswith("Russian, 48 kHz, AC3 Dolby Digital")
+    assert (meta.imdb_id, meta.kp_id) == (None, None)
+    assert meta.extra["format"] == "MKV"
+
+
+def test_rutracker_without_post_body_keeps_the_topic_title() -> None:
+    meta = rutracker.parse(
+        '<html><body><a id="topic-title">Дюна / Dune (1984) BDRip</a></body></html>',
+        RT.format(3),
+    )
+    assert (meta.title_ru, meta.title_en, meta.year) == ("Дюна", "Dune", 1984)
+    assert meta.poster_urls == [] and meta.plot is None
 
 
 # --- megapeer --------------------------------------------------------------

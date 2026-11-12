@@ -71,7 +71,10 @@ _VIDEO_TECH = re.compile(
     r"\d{3,4}x\d{3,4}|AVC|HEVC|x26[45]|H\.?26[45]|MPEG|kbps|Кбит|fps|AV1|VP9|XviD|DivX",
     re.I,
 )
-_LANG_CODE = re.compile(r"[a-z]{3}")
+# "Аудио", "Аудио 2", "Аудио #1", "Аудио Rus", "Звук", or a bare "RUS"/"ENG" label
+_AUDIO_LABEL = re.compile(
+    r"(?:аудио|звук)(?:\s*#?\s*\d+)?(?:\s+([a-z]{2,3}))?|([a-z]{3})"
+)
 _LABEL_LINE = re.compile(r"^\s*([^:]{1,40}?)\s*:\s*(.+)$")
 _LABEL_NUMBER = re.compile(r"[\s№#(]*\d+[)]?\s*$|\(ы\)$")
 _AUDIO_CODEC = re.compile(
@@ -574,8 +577,9 @@ def apply_fields(meta: TorrentMeta, fields: list[Field]) -> None:  # noqa: C901
             quality = quality or value[:60]
         elif label == "видео" and _VIDEO_TECH.search(value):
             video_tech = video_tech or value[:100]
-        elif re.fullmatch(r"(аудио|звук)(?:\s*#?\s*\d+)?|[a-z]{3}", label):
-            prefix = f"{label.upper()}: " if _LANG_CODE.fullmatch(label) else ""
+        elif found := _AUDIO_LABEL.fullmatch(label):
+            code = found.group(1) or found.group(2)
+            prefix = f"{code.upper()}: " if code else ""
             audio.append(prefix + value[:80])
         elif label in ("формат", "контейнер", "формат видео"):
             meta.extra.setdefault("format", value.split(" (")[0][:30])

@@ -20,6 +20,7 @@ from tj_bot.services.enrich.model import (
     NotFoundError,
     ScrapeError,
 )
+from tj_bot.services.enrich.parsers import parser_for
 from tj_bot.services.enrich.service import (
     EnrichmentService,
     HostBreaker,
@@ -389,13 +390,12 @@ async def test_worker_survives_a_crashing_job(
     def broken(url: str) -> None:
         raise RuntimeError("parser bug")
 
-    original = service_module.parser_for
     monkeypatch.setattr(service_module, "parser_for", broken)
     ready = Ready(service)
     meta = await service.card_meta(torrent(), budget=5)
     assert meta.pending is False and meta.title_ru == "Дюна: Часть вторая"
     await ready.wait()
-    monkeypatch.setattr(service_module, "parser_for", original)
+    monkeypatch.setattr(service_module, "parser_for", parser_for)
     assert (await service.card_meta(torrent("h2"), budget=5)).genres
 
 

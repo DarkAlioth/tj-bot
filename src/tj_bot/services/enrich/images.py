@@ -23,7 +23,10 @@ MOSAIC_ROWS = 6
 COVER_SIZE = (600, 900)
 # Pillow's bundled default font (Aileron) has no Cyrillic; the runtime image
 # installs fonts-dejavu-core for the generated covers.
-COVER_FONT = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+COVER_FONTS = (
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+)
 _CHUNK = 64 * 1024
 
 
@@ -190,8 +193,9 @@ def _hsl(hue: int, saturation: float, lightness: float) -> tuple[int, int, int]:
 
 
 def _cover_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    if COVER_FONT.exists():
-        return ImageFont.truetype(str(COVER_FONT), size)
+    for path in COVER_FONTS:
+        if path.exists():
+            return ImageFont.truetype(str(path), size)
     return ImageFont.load_default(size=size)
 
 

@@ -21,7 +21,12 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
-RUN groupadd -r bot && useradd -r -g bot -d /app bot
+# DejaVu gives the generated poster covers a font with Cyrillic glyphs
+# (Pillow's bundled default font is Latin-only)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r bot && useradd -r -g bot -d /app bot
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv

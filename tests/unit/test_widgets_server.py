@@ -3,7 +3,6 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
 
 from tj_bot.db.models import WidgetMessage
@@ -34,7 +33,6 @@ def make_bot() -> AsyncMock:
     sent = MagicMock(spec=Message)
     sent.message_id = 99
     bot.return_value = sent  # the result of every awaited method
-    bot.edit_message_caption = AsyncMock()
     return bot
 
 
@@ -192,7 +190,7 @@ async def test_widget_ui_filter_excludes_classic_users() -> None:
 # --- picker -------------------------------------------------------------------
 
 
-async def test_send_picker_widget_records_context_and_caption() -> None:
+async def test_send_picker_widget_records_context() -> None:
     bot = make_bot()
     repo = make_repo()
 
@@ -202,7 +200,6 @@ async def test_send_picker_widget_records_context_and_caption() -> None:
     state = json.loads(widget.chat_data or "")
     assert state["m"] == "pick" and state["k"] == 2 and state["c"] == 3
     assert state["d"] == [["Season 1", 3, 2]]
-    assert (widget.caption or "").startswith("📤 <b>Movie</b> — выберите файлы")
     repo.save_widget_message.assert_awaited_once_with(
         777, 99, "picker", {"h": HASH, "n": "Movie", "page": 0}, rev=1
     )
@@ -232,7 +229,6 @@ async def test_picker_toggle_answers_fragment_and_edits_state() -> None:
     repo.update_widget_message.assert_awaited_once_with(
         777, 7, context={"h": HASH, "n": "Movie", "page": 0}, rev=4
     )
-    bot.edit_message_caption.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -305,7 +301,6 @@ async def test_picker_vanished_torrent_answers_error_and_marks_gone() -> None:
     assert answer(bot)["err"].startswith("Загрузка не найдена")
     assert edits(bot) == [{"v": 1, "r": 4, "m": "gone", "n": "Movie"}]
     assert answered_before_edit(bot)
-    bot.edit_message_caption.assert_awaited_once()
 
 
 async def test_picker_qbit_errors_and_missing_client() -> None:
@@ -388,11 +383,9 @@ async def test_picker_go_starts_records_and_sends_progress() -> None:
     repo.record_download.assert_awaited_once_with(111, "Movie", "server")
     assert answer(bot) == {"r": 4, "m": "go"}
     assert edits(bot) == [{"v": 1, "r": 4, "m": "go", "n": "Movie"}]
-    assert "Запущено" in bot.edit_message_caption.await_args.kwargs["caption"]
     (progress,) = sent_widgets(bot)
     state = json.loads(progress.chat_data or "")
     assert state["st"] == "downloading" and (state["fc"], state["ft"]) == (2, 3)
-    assert (progress.caption or "").startswith("⬇️ <b>Movie</b> — 50,0 %")
     repo.save_widget_message.assert_awaited_once_with(
         777,
         99,
@@ -456,9 +449,6 @@ async def test_picker_cancel_deletes_with_files() -> None:
     qbit.delete_torrents.assert_awaited_once_with(HASH, delete_files=True)
     assert answer(bot) == {"r": 4, "m": "x"}
     assert edits(bot) == [{"v": 1, "r": 4, "m": "x", "n": "Movie"}]
-    assert bot.edit_message_caption.await_args.kwargs["caption"] == (
-        "❌ Удалено из qBittorrent"
-    )
 
     bot = make_bot()
     qbit.delete_torrents.side_effect = QbittorrentError("down")
@@ -466,22 +456,6 @@ async def test_picker_cancel_deletes_with_files() -> None:
         make_query("x", bot), picker_widget(), make_repo(), qbit, bot
     )
     assert answer(bot) == {"err": "qBittorrent недоступен"}
-
-
-async def test_caption_edit_failures_are_ignored() -> None:
-    bot = make_bot()
-    bot.edit_message_caption.side_effect = TelegramBadRequest(
-        method=AnswerWidgetQuery(widget_query_id="q"), message="not modified"
-    )
-
-    await ws.picker_cancel(
-        make_query("x", bot), picker_widget(), make_repo(), make_qbit(), bot
-    )
-
-    assert answer(bot)["m"] == "x"
-
-
-# --- progress -----------------------------------------------------------------
 
 
 async def test_progress_tick_answers_snapshot_without_editing() -> None:
@@ -516,9 +490,6 @@ async def test_progress_tick_persists_a_transition_once() -> None:
         context={"h": HASH, "n": "Movie", "st": "done", "fc": 2, "ft": 3},
         rev=4,
     )
-    assert bot.edit_message_caption.await_args.kwargs["caption"].startswith(
-        "✅ Загрузка завершена"
-    )
 
     bot = make_bot()
     await ws.progress_refresh(
@@ -545,7 +516,6 @@ async def test_progress_tick_of_a_vanished_torrent() -> None:
         "n": "Movie",
         "st": "gone",
     }
-    assert "Удалено" in bot.edit_message_caption.await_args.kwargs["caption"]
 
     bot = make_bot()
     await ws.progress_refresh(
@@ -599,7 +569,6 @@ async def test_progress_controls_answer_snapshot_and_persist(
     assert answered_before_edit(bot)
     repo.update_widget_message.assert_awaited_once()
     assert repo.update_widget_message.await_args.kwargs["context"]["st"] == "paused"
-    assert "на паузе" in bot.edit_message_caption.await_args.kwargs["caption"]
 
 
 async def test_progress_recheck_starts_after_the_check() -> None:
@@ -724,7 +693,6 @@ async def test_dl_command_sends_the_console_widget() -> None:
     state = json.loads(console.chat_data or "")
     assert (state["tab"], state["pg"], state["np"]) == ("all", 0, 1)
     assert [row[0] for row in state["rows"]] == ["3f9a1c2b", "deadbeef"]
-    assert (console.caption or "").startswith("qBittorrent · ↓ 4,8 МБ/с")
     message.answer.assert_not_awaited()
 
 
@@ -740,7 +708,6 @@ async def test_dl_command_without_client_or_with_qbit_down() -> None:
     await ws.console_command(cast(Message, message), make_repo(), qbit, bot)
     (console,) = sent_widgets(bot)
     assert json.loads(console.chat_data or "")["err"] == "qBittorrent недоступен"
-    assert console.caption == "qBittorrent недоступен"
 
 
 async def test_console_tick_answers_snapshot_without_editing() -> None:

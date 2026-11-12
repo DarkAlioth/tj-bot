@@ -289,7 +289,6 @@ async def test_show_dashboard_sends_the_widget_on_the_command_tab(
     assert state["h"]["q"] is None
     assert state["h"]["db"] == 123_400_000
     assert state["i"] == [["RuTracker", 1204], ["RuTor", 0, "login failed"]]
-    assert "индексеры 1/2" in args[4]
     assert kwargs["kind"] == "dashboard"
     assert kwargs["context"] == {"a": "s", "top": ["дюна", "шерлок"], "i": state["i"]}
     repo.get_stats.assert_awaited_once_with(datetime.timedelta(days=7), top_limit=8)
@@ -443,7 +442,6 @@ async def test_show_users_sends_the_first_page(monkeypatch: pytest.MonkeyPatch) 
     assert state["c"] == [3, 3, 3, 3]
     assert state["u"][0][:4] == [100, "Alice", "alice", 2]
     assert state["u"][1][3] == 1
-    assert args[4].startswith("👥 Пользователи: всего 3")
     assert kwargs["context"] == {"g": "a", "p": 0}
 
 
@@ -587,7 +585,6 @@ async def test_broadcast_draft_needs_text_and_sends_the_raw_draft(
     args, kwargs = call_of(send).args, call_of(send).kwargs
     assert args[2] == "broadcast"
     assert args[3]["st"] == "draft" and args[3]["n"] == 3 and args[3]["tx"] == text
-    assert args[4] == "📢 Рассылка 3 пользователям — подтвердите в виджете выше."
     assert kwargs["context"] == {"st": "draft", "tx": text, "n": 3}
 
 
@@ -643,9 +640,6 @@ async def test_broadcast_go_starts_delivery_and_reports_done(
         "ok": 2,
         "fail": 1,
     }
-    bot.edit_message_caption.assert_awaited_once_with(
-        chat_id=CHAT, message_id=MESSAGE_ID, caption="📢 Доставлено 2 из 3"
-    )
     pool.session.commit.assert_awaited_once()
 
 
@@ -658,12 +652,6 @@ async def test_deliver_broadcast_logs_a_failed_report(
     )
     monkeypatch.setattr(wa, "TorrentRepo", lambda session: make_repo())
     bot = AsyncMock()
-    bot.edit_message_caption.side_effect = TelegramBadRequest(
-        method=EditMessageWidgetData(
-            chat_id=CHAT, message_id=MESSAGE_ID, chat_data="{}"
-        ),
-        message="Bad Request: message to edit not found",
-    )
     progress = wa.BroadcastProgress(rev=2, recipients=1)
 
     await wa.deliver_broadcast(bot, KEY, progress, [1], "hi", FakePool().typed)

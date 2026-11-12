@@ -545,7 +545,6 @@ async def test_list_from_card_sends_the_page_of_the_card_and_records_it() -> Non
         "дюна",
         10,
     )
-    assert widget.caption == "Результаты 11–20 из 10 по запросу «дюна» · Сиды ↓"
     repo.save_widget_message.assert_awaited_once_with(
         CHAT_ID, 42, "search-list", {"qh": QH, "card": CARD_MID}, rev=1
     )
@@ -613,7 +612,6 @@ async def test_filters_from_the_list_carry_card_and_list_ids() -> None:
     assert (state["i"], state["f"], state["c"], state["n"]) == (10, "000", "ALL", 10)
     assert state["cats"][0] == ["ALL", "Все", 10]
     assert state["cats"][1][1:] == ["Фильмы HD", 8]
-    assert widget.caption == "Фильтры поиска «дюна» · Активно: не заданы"
     repo.save_widget_message.assert_awaited_once_with(
         CHAT_ID,
         42,

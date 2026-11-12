@@ -11,12 +11,10 @@ from tj_bot.services.cards import (
     category_view,
     cut,
     done_state,
-    filters_caption,
     filters_done_text,
     filters_state,
     fmt_int,
     fmt_size,
-    list_caption,
     list_state,
     more_answer,
     pack,
@@ -371,6 +369,23 @@ def test_filters_state_categories_capped_sorted_and_optional() -> None:
     assert "cats" not in filters_state(ctx, rev=3, categories=[("Movies", 9)])
 
 
+def test_plot_falls_back_to_the_jackett_description() -> None:
+    torrent = make_torrent(description="Пустыня &amp; специя. " * 8)
+    state = search_state(torrent, CTX, CardMeta(), rev=1, is_fav=False)
+    assert state["pl"].startswith("Пустыня & специя.") and state["pm"] == 1
+    assert more_answer(CardMeta(), torrent)["pl"].startswith("Пустыня & специя.")
+    assert "pl" not in search_state(
+        make_torrent(description=None), CTX, CardMeta(), rev=1, is_fav=False
+    )
+
+
+def test_more_answer_drops_the_cast_when_the_plot_fills_the_answer() -> None:
+    meta = CardMeta(plot="ж" * 600, director="Режиссёр", cast=("Актёр Актёров",) * 4)
+    answer = more_answer(meta, make_torrent())
+    assert len(answer["pl"]) == 450 and "pp" not in answer
+    assert len(json.dumps(answer, ensure_ascii=False).encode()) <= 1024
+
+
 def test_filters_texts() -> None:
     filters = ResultFilters.from_code("120")
 
@@ -383,15 +398,9 @@ def test_filters_texts() -> None:
     assert filters_done_text(ResultFilters(date=3), None, 1) == (
         "Применено: за год · 1 результат"
     )
-    assert filters_caption("дюна", ResultFilters(), None) == (
-        "Фильтры поиска «дюна» · Активно: не заданы"
-    )
-    assert filters_caption(None, ResultFilters(seeders=3), "TV") == (
-        "Фильтры поиска «» · Активно: сиды 50+ · Сериалы"
-    )
 
 
-def test_list_state_rows_meta_and_caption() -> None:
+def test_list_state_rows_and_meta() -> None:
     ctx = SearchContext(qh=QH, index=10, total=302, filter_code="100")
 
     state = list_state(list_torrents(10), ctx, rev=8, query_text="дюна" * 10)
@@ -408,26 +417,3 @@ def test_list_state_rows_meta_and_caption() -> None:
         f"45 ГБ|01.03.24|1{THIN_SPACE}543|RuTracker",
     ]
     assert state_size(state) <= MAX_STATE_BYTES
-    assert list_caption(state, "дюна") == (
-        "Результаты 11–20 из 302 по запросу «дюна» · Сиды ↓"
-    )
-    assert list_caption({"i0": 0, "rows": [], "n": 0, "sl": "Сиды ↓"}, None) == (
-        "Результаты 1–0 из 0 · Сиды ↓"
-    )
-
-
-def test_plot_falls_back_to_the_jackett_description() -> None:
-    torrent = make_torrent(description="Пустыня &amp; специя. " * 8)
-    state = search_state(torrent, CTX, CardMeta(), rev=1, is_fav=False)
-    assert state["pl"].startswith("Пустыня & специя.") and state["pm"] == 1
-    assert more_answer(CardMeta(), torrent)["pl"].startswith("Пустыня & специя.")
-    assert "pl" not in search_state(
-        make_torrent(description=None), CTX, CardMeta(), rev=1, is_fav=False
-    )
-
-
-def test_more_answer_drops_the_cast_when_the_plot_fills_the_answer() -> None:
-    meta = CardMeta(plot="ж" * 600, director="Режиссёр", cast=("Актёр Актёров",) * 4)
-    answer = more_answer(meta, make_torrent())
-    assert len(answer["pl"]) == 450 and "pp" not in answer
-    assert len(json.dumps(answer, ensure_ascii=False).encode()) <= 1024

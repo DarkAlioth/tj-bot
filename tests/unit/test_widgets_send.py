@@ -69,7 +69,6 @@ async def test_send_widget_sends_html_state_caption_and_records_context() -> Non
         1,
         "search",
         {"v": 1, "r": 3},
-        "caption",
         repo=repo,
         kind="search",
         context={"qh": "abcd"},
@@ -80,9 +79,8 @@ async def test_send_widget_sends_html_state_caption_and_records_context() -> Non
     assert method.chat_id == 1
     assert method.html.startswith("<")
     assert method.chat_data == '{"v":1,"r":3}'
-    assert method.caption == "caption"
+    assert method.caption is None
     assert method.allow_queries is True
-    assert method.show_caption_above_media is False
     repo.save_widget_message.assert_awaited_once_with(
         1, 42, "search", {"qh": "abcd"}, rev=3
     )

@@ -8,8 +8,6 @@ import pytest
 from tj_bot.db.repo import HistoryEntry
 from tj_bot.services.formatting import format_size_ru, group_thousands
 from tj_bot.services.hub_views import (
-    ADMIN_CAPTION,
-    CAPTION,
     HubStatus,
     clamp_page,
     cut,
@@ -19,7 +17,6 @@ from tj_bot.services.hub_views import (
     favorites_pages,
     history_age,
     history_row,
-    hub_caption,
     hub_state,
     state_bytes,
     tracker_name,
@@ -382,9 +379,3 @@ def test_state_over_the_hard_limit_raises() -> None:
     assert size(big) <= 1024
     with pytest.raises(StateTooLargeError):
         dumps_state({**big, "pad": "x" * 1024})
-
-
-def test_caption() -> None:
-    assert hub_caption(False) == CAPTION
-    assert hub_caption(True) == f"{CAPTION}\n{ADMIN_CAPTION}"
-    assert "/history" in CAPTION and "/favorites" in CAPTION

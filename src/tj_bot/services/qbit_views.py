@@ -7,7 +7,6 @@ Pure functions over qBittorrent API rows (``torrents/info``, ``torrents/files``,
 """
 
 import datetime
-import html
 import math
 import os.path
 from collections.abc import Callable
@@ -97,7 +96,6 @@ FILE_CLASSES = {
     "r": frozenset({"rar", "zip", "7z", "iso"}),
 }
 CLASS_ORDER = "vasro"
-PICKER_CANCELLED_CAPTION = "❌ Удалено из qBittorrent"
 
 
 def file_class(name: str) -> str:
@@ -323,20 +321,6 @@ def picker_terminal(name: str, mode: str, rev: int) -> dict[str, Any]:
     return state
 
 
-def picker_caption(name: str, view: PickerView) -> str:
-    return (
-        f"📤 <b>{html.escape(name)}</b> — выберите файлы · "
-        f"{view.selected_count} из {len(view.files)}, "
-        f"{size_ru(view.selected_kb * KIB)} из {size_ru(view.total_kb * KIB)}"
-    )
-
-
-def picker_started_caption(name: str) -> str:
-    return f"⬇️ Запущено: <b>{html.escape(name)}</b>"
-
-
-# --- progress -----------------------------------------------------------------
-
 PROGRESS_NAME_LIMIT = 120
 PAUSED_STATES = frozenset({"stoppedDL", "pausedDL"})
 STOPPED_UP_STATES = frozenset({"stoppedUP", "pausedUP"})
@@ -405,28 +389,6 @@ def progress_phase(info: dict[str, Any]) -> str:
         return "done"
     return "active"
 
-
-def progress_caption(snapshot: dict[str, Any]) -> str:
-    """Fallback caption for a progress state or snapshot (``n``, ``st`` required)."""
-    name = html.escape(str(snapshot["n"]))
-    state = str(snapshot["st"])
-    if state == "gone":
-        return f"🗑 Удалено из qBittorrent: <b>{name}</b>"
-    progress = float(snapshot.get("pr") or 0)
-    if progress >= 1:
-        return f"✅ Загрузка завершена: <b>{name}</b>"
-    if state in ERROR_STATES:
-        return f"❌ <b>{name}</b> — {STATE_VIEW[state][1]}"
-    percent = f"{progress * 100:.1f}".replace(".", ",")
-    if state in PAUSED_STATES:
-        return f"⏸ <b>{name}</b> — {percent} %, на паузе"
-    return (
-        f"⬇️ <b>{name}</b> — {percent} %, {speed_ru(int(snapshot.get('ds') or 0))}, "
-        f"осталось {eta_ru(int(snapshot.get('eta', -1)))}"
-    )
-
-
-# --- console ------------------------------------------------------------------
 
 CONSOLE_PAGE = 6
 CONSOLE_NAME_LIMIT = 36
@@ -602,17 +564,3 @@ def console_patch(
         patch |= console_details(torrent)
     dumps_state(patch)
     return patch
-
-
-def console_caption(torrents: list[dict[str, Any]], transfer: dict[str, Any]) -> str:
-    if not torrents:
-        return CONSOLE_EMPTY_CAPTION
-    total = len(torrents)
-    downloading = console_counts(torrents)["dl"]
-    return (
-        f"qBittorrent · ↓ {speed_ru(int(transfer.get('dl_info_speed') or 0))} · "
-        f"↑ {speed_ru(int(transfer.get('up_info_speed') or 0))} · "
-        f"{total} {plural(total, 'торрент', 'торрента', 'торрентов')} "
-        f"({downloading} "
-        f"{plural(downloading, 'загружается', 'загружаются', 'загружаются')})"
-    )

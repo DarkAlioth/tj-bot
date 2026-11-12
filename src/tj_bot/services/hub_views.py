@@ -208,7 +208,3 @@ def hub_state(
             rows.pop()
     dumps_state(state)  # raises when a row set still exceeds the hard limit
     return state
-
-
-def hub_caption(admin: bool) -> str:
-    return f"{CAPTION}\n{ADMIN_CAPTION}" if admin else CAPTION

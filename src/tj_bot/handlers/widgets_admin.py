@@ -42,15 +42,11 @@ from tj_bot.services.admin_views import (
     Health,
     QbitSummary,
     activity_answer,
-    broadcast_caption,
-    broadcast_done_caption,
     broadcast_state,
-    dashboard_caption,
     dashboard_state,
     dashboard_tick,
     indexer_rows,
     user_row,
-    users_caption,
     users_state,
     with_toast,
 )
@@ -190,8 +186,8 @@ async def build_dashboard(
     *,
     tab: str,
     rev: int,
-) -> tuple[dict[str, Any], str, dict[str, Any]]:
-    """State, caption and the stored context of a dashboard message."""
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """State and the stored context of a dashboard message."""
     health = await collect_health(repo, qbit, monitor, started_at)
     stats = await repo.get_stats(
         datetime.timedelta(days=STATS_WINDOW_DAYS), top_limit=TOP_QUERIES
@@ -207,10 +203,9 @@ async def build_dashboard(
         indexers=monitor.indexers,
         problems=monitor.problems,
     )
-    caption = dashboard_caption(health, stats, monitor.indexers, monitor.problems)
     # q:<i> resolves against the top list this message shows, not a newer one
     context = {"a": tab, "top": [row[0] for row in state["s"]["top"]], "i": state["i"]}
-    return state, caption, context
+    return state, context
 
 
 @widgets_admin_router.message(Command("health", "stats", "indexers"), WidgetUser())
@@ -223,7 +218,7 @@ async def show_dashboard(
     monitor: MonitorState,
     started_at: datetime.datetime,
 ) -> None:
-    state, caption, context = await build_dashboard(
+    state, context = await build_dashboard(
         repo,
         qbit,
         monitor,
@@ -236,7 +231,6 @@ async def show_dashboard(
         message.chat.id,
         "dashboard",
         state,
-        caption,
         repo=repo,
         kind="dashboard",
         context=context,
@@ -287,7 +281,7 @@ async def finish_check(
             widget = await repo.get_widget_message(chat_id, message_id)
             if widget is None:
                 return
-            state, _, context = await build_dashboard(
+            state, context = await build_dashboard(
                 repo,
                 qbit,
                 monitor,
@@ -390,7 +384,7 @@ async def dashboard_query(
 
 async def build_users(
     repo: TorrentRepo, config: AppConfig, group: str, page: int, rev: int
-) -> tuple[dict[str, Any], str, dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     counts = [
         await repo.count_users(name, config.super_admins)
         for name in USER_GROUPS.values()
@@ -416,20 +410,19 @@ async def build_users(
         counts=counts,
         rows=rows,
     )
-    return state, users_caption(counts, page, pages), {"g": group, "p": page}
+    return state, {"g": group, "p": page}
 
 
 @widgets_admin_router.message(Command("users"), WidgetUser())
 async def show_users(
     message: Message, bot: Bot, repo: TorrentRepo, config: AppConfig
 ) -> None:
-    state, caption, context = await build_users(repo, config, "a", 0, FIRST_REV)
+    state, context = await build_users(repo, config, "a", 0, FIRST_REV)
     await send_widget(
         bot,
         message.chat.id,
         "users",
         state,
-        caption,
         repo=repo,
         kind="users",
         context=context,
@@ -448,7 +441,7 @@ async def respond_users(
 ) -> AnswerWidgetQuery:
     """Publish the page as the next revision and answer with the same state."""
     chat_id, message_id = message_key(query)
-    state, _, context = await build_users(repo, config, group, page, widget.rev + 1)
+    state, context = await build_users(repo, config, group, page, widget.rev + 1)
     await edit_widget_state(bot, chat_id, message_id, state, repo=repo, context=context)
     return answer_json(query, with_toast(state, toast))
 
@@ -613,7 +606,6 @@ async def broadcast_draft(
         message.chat.id,
         "broadcast",
         state,
-        broadcast_caption(recipients),
         repo=repo,
         kind="broadcast",
         context={"st": "draft", "tx": text, "n": recipients},
@@ -662,11 +654,6 @@ async def deliver_broadcast(
                 context=broadcast_context("done", text, progress),
             )
             await session.commit()
-        await bot.edit_message_caption(
-            chat_id=chat_id,
-            message_id=message_id,
-            caption=broadcast_done_caption(progress.ok, progress.recipients),
-        )
     except (TelegramAPIError, SQLAlchemyError):
         logger.exception("Broadcast %s: report not published", key)
 

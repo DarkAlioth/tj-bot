@@ -39,7 +39,7 @@ async def test_console_shortcut_sends_the_console_or_a_notice(
 async def test_dashboard_and_users_shortcuts_build_and_send(
     monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
-    build = AsyncMock(return_value=({"v": 1, "r": 1}, "caption", {"a": "h"}))
+    build = AsyncMock(return_value=({"v": 1, "r": 1}, {"a": "h"}))
     sent = AsyncMock()
     monkeypatch.setattr(widgets_links, "build_dashboard", build)
     monkeypatch.setattr(widgets_links, "build_users", build)

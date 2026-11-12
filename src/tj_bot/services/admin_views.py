@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from tj_bot.db.models import BotUser
 from tj_bot.db.repo import SearchStats
-from tj_bot.services.formatting import format_size, format_speed
 from tj_bot.services.monitor import IndexerStatus, Problem
 from tj_bot.widgets.state import MAX_STATE_BYTES, dumps_state
 
@@ -192,34 +191,6 @@ def dashboard_tick(
     return answer
 
 
-def dashboard_caption(
-    health: Health,
-    stats: SearchStats,
-    indexers: Sequence[IndexerStatus],
-    problems: dict[str, Problem],
-) -> str:
-    qbit = health.qbit
-    if qbit is None:
-        qbit_text = "недоступен"
-    else:
-        qbit_text = (
-            f"{qbit.active}/{qbit.total} "
-            f"({format_speed(qbit.dl_speed)}↓ {format_speed(qbit.up_speed)}↑)"
-        )
-    healthy = sum(1 for row in indexer_rows(indexers, problems) if len(row) == 2)
-    return (
-        f"🩺 Панель: аптайм {format_duration(health.uptime)}"
-        f" · диск {format_size(health.disk[0])}"
-        f" · qBittorrent {qbit_text}"
-        f" · индексеры {healthy}/{len(indexers)}\n"
-        f"📊 {STATS_WINDOW_DAYS} дней: {stats.events_window} поисков,"
-        f" {stats.users_window} пользователей"
-    )
-
-
-# --- users -----------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class UserRow:
     user_id: int
@@ -333,20 +304,6 @@ def activity_answer(
     }
 
 
-def users_caption(counts: Sequence[int], page: int, pages: int) -> str:
-    total, regular, admins, blocked = counts
-    caption = (
-        f"👥 Пользователи: всего {total} · обычных {regular}"
-        f" · админов {admins} · в блоке {blocked}"
-    )
-    if pages > 1:
-        caption += f" · стр. {page + 1}/{pages}"
-    return caption
-
-
-# --- broadcast -------------------------------------------------------------
-
-
 def _cut_words(text: str, chars: int) -> str:
     cut = text[:-chars]
     boundary = max(cut.rfind(" "), cut.rfind("\n"))
@@ -386,11 +343,3 @@ def broadcast_state(
 def recipients_dative(count: int) -> str:
     word = "пользователю" if count % 10 == 1 and count % 100 != 11 else "пользователям"
     return f"{count} {word}"
-
-
-def broadcast_caption(recipients: int) -> str:
-    return f"📢 Рассылка {recipients_dative(recipients)} — подтвердите в виджете выше."
-
-
-def broadcast_done_caption(ok: int, recipients: int) -> str:
-    return f"📢 Доставлено {ok} из {recipients}"

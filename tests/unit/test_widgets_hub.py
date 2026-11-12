@@ -199,7 +199,6 @@ async def test_commands_send_the_hub_on_their_tab(handler: Any, tab: str) -> Non
     state = json.loads(method.chat_data or "")
     assert state["tb"] == tab and state["r"] == 1 and state["adm"] == 1
     assert ("st" in state) == (tab == "m")
-    assert "/users" in (method.caption or "")
     repo.save_widget_message.assert_awaited_once()
     assert repo.save_widget_message.await_args.args[2] == "hub"
     assert repo.save_widget_message.await_args.args[3]["tab"] == tab
@@ -209,18 +208,6 @@ async def test_open_without_user_is_ignored() -> None:
     bot = make_bot()
     await hub_start(make_message(user=False), make_repo(), make_config(), bot)
     bot.assert_not_awaited()
-
-
-async def test_user_caption_has_no_admin_line() -> None:
-    bot = make_bot()
-    bot.return_value = MagicMock(spec=Message, message_id=1)
-    await hub_start(make_message(), make_repo(), make_config(admin=False), bot)
-    method = sent_methods(bot)[0]
-    assert "/users" not in (method.caption or "")
-    assert "adm" not in json.loads(method.chat_data or "")
-
-
-# --- view switching ----------------------------------------------------------
 
 
 async def test_tab_switch_answers_fragment_then_edits_state() -> None:

@@ -243,22 +243,6 @@ def test_picker_fragment_and_page_answers() -> None:
     assert size_of(fragment) <= 1024
 
 
-def test_picker_terminal_and_captions() -> None:
-    assert views.picker_terminal("Dune", "go", 5) == {
-        "v": 1,
-        "r": 5,
-        "m": "go",
-        "n": "Dune",
-    }
-    view = views.picker_view(
-        [make_file(0, "a <x>.mkv", 2 * GB, 0), make_file(1, "b.mkv")]
-    )
-    assert views.picker_caption("T <b>", view) == (
-        "📤 <b>T &lt;b&gt;</b> — выберите файлы · 1 из 2, 1 ГБ из 3 ГБ"
-    )
-    assert views.picker_started_caption("A & B") == "⬇️ Запущено: <b>A &amp; B</b>"
-
-
 def test_toggle_priority_and_selected_counts() -> None:
     view = views.picker_view([make_file(0, "a.mkv"), make_file(1, "b.mkv", priority=0)])
 
@@ -345,25 +329,6 @@ def test_progress_state_and_gone_fit_the_budget() -> None:
 )
 def test_progress_phase(state: str, progress: float, phase: str) -> None:
     assert views.progress_phase({"state": state, "progress": progress}) == phase
-
-
-def test_progress_captions() -> None:
-    active = views.progress_snapshot(make_torrent(name="A <b>"), 1, 1)
-    assert views.progress_caption(active) == (
-        "⬇️ <b>A &lt;b&gt;</b> — 37,2 %, 11,8 МБ/с, осталось 54 м"
-    )
-    paused = views.progress_snapshot(make_torrent(state="stoppedDL", name="N"), 1, 1)
-    assert views.progress_caption(paused) == "⏸ <b>N</b> — 37,2 %, на паузе"
-    done = views.progress_snapshot(make_torrent(state="uploading", progress=1), 1, 1)
-    assert views.progress_caption(done).startswith("✅ Загрузка завершена: <b>")
-    error = views.progress_snapshot(make_torrent(state="missingFiles"), 1, 1)
-    assert views.progress_caption(error).endswith("— Файлы не найдены")
-    assert views.progress_caption(views.progress_gone("N", HASH, 1, NOW)) == (
-        "🗑 Удалено из qBittorrent: <b>N</b>"
-    )
-
-
-# --- console ------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -531,16 +496,6 @@ def test_console_unavailable_details_and_patch() -> None:
     assert set(patch) == {"r", "t", "cnt", "tr", "row", "x"}
     assert patch["r"] == 5 and patch["row"][0] == "3f9a1c2b"
     assert set(views.console_patch(state, None)) == {"r", "t", "cnt", "tr"}
-
-
-def test_console_caption() -> None:
-    transfer = {"dl_info_speed": 15_500_000, "up_info_speed": 4_030_000}
-    assert views.console_caption(console_torrents(), transfer) == (
-        "qBittorrent · ↓ 14,8 МБ/с · ↑ 3,8 МБ/с · 10 торрентов (3 загружаются)"
-    )
-    one = [make_torrent()]
-    assert views.console_caption(one, {}).endswith("1 торрент (1 загружается)")
-    assert views.console_caption([], transfer) == "qBittorrent · нет задач"
 
 
 def test_every_builder_output_serializes_within_the_limit() -> None:

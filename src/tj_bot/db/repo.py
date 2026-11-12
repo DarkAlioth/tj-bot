@@ -16,6 +16,7 @@ from tj_bot.db.models import (
     SearchQuery,
     SearchQueryTorrent,
     Torrent,
+    WidgetMessage,
 )
 
 
@@ -430,7 +431,11 @@ class TorrentRepo:
         deleted_downloads = await self._delete_rows(
             delete(DownloadEvent).where(DownloadEvent.created_at < history_cutoff)
         )
-        return deleted_queries + deleted_torrents + deleted_downloads
+        # a widget untouched for the whole history window is dead in the chat
+        deleted_widgets = await self._delete_rows(
+            delete(WidgetMessage).where(WidgetMessage.updated_at < history_cutoff)
+        )
+        return deleted_queries + deleted_torrents + deleted_downloads + deleted_widgets
 
     async def touch_user(
         self, user_id: int, username: str | None, full_name: str | None
@@ -572,3 +577,80 @@ class TorrentRepo:
             )
         ).scalar_one()
         return searches, downloads
+
+    async def set_classic_ui(self, user_id: int, enabled: bool) -> None:
+        user = await self.get_user(user_id)
+        if user is not None:
+            user.classic_ui = enabled
+            await self.session.flush()
+
+    async def uses_classic_ui(self, user_id: int) -> bool:
+        stmt = select(BotUser.classic_ui).where(BotUser.user_id == user_id)
+        return bool((await self.session.execute(stmt)).scalar_one_or_none())
+
+    async def save_widget_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        kind: str,
+        context: dict[str, Any],
+        rev: int = 0,
+    ) -> None:
+        """Remember what a sent widget is about (its queries carry no state)."""
+        stmt = (
+            pg_insert(WidgetMessage)
+            .values(
+                chat_id=chat_id,
+                message_id=message_id,
+                kind=kind,
+                context=context,
+                rev=rev,
+            )
+            .on_conflict_do_update(
+                index_elements=[WidgetMessage.chat_id, WidgetMessage.message_id],
+                set_={"kind": kind, "context": context, "rev": rev},
+            )
+        )
+        await self.session.execute(stmt)
+
+    async def get_widget_message(
+        self, chat_id: int, message_id: int
+    ) -> WidgetMessage | None:
+        return await self.session.get(WidgetMessage, (chat_id, message_id))
+
+    async def update_widget_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        context: dict[str, Any] | None = None,
+        rev: int | None = None,
+    ) -> bool:
+        """Replace the context and/or revision; False when the message is unknown."""
+        row = await self.get_widget_message(chat_id, message_id)
+        if row is None:
+            return False
+        if context is not None:
+            row.context = context
+        if rev is not None:
+            row.rev = rev
+        await self.session.flush()
+        return True
+
+    async def delete_widget_message(self, chat_id: int, message_id: int) -> None:
+        await self.session.execute(
+            delete(WidgetMessage).where(
+                WidgetMessage.chat_id == chat_id, WidgetMessage.message_id == message_id
+            )
+        )
+
+    async def widget_messages_of_kind(
+        self, kind: str, limit: int = 200
+    ) -> list[WidgetMessage]:
+        """Most recently touched widgets of one kind (for enrichment pushes)."""
+        stmt = (
+            select(WidgetMessage)
+            .where(WidgetMessage.kind == kind)
+            .order_by(WidgetMessage.updated_at.desc())
+            .limit(limit)
+        )
+        return list((await self.session.execute(stmt)).scalars())

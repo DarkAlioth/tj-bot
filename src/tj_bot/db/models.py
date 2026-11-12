@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -81,6 +83,8 @@ class BotUser(Base):
     full_name: Mapped[str | None] = mapped_column(String(256))
     blocked: Mapped[bool] = mapped_column(server_default=text("false"))
     admin: Mapped[bool] = mapped_column(server_default=text("false"))
+    # opted out of widgets (old client): text cards and inline keyboards
+    classic_ui: Mapped[bool] = mapped_column(server_default=text("false"))
     first_seen: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -120,4 +124,22 @@ class DownloadEvent(Base):
     kind: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class WidgetMessage(Base):
+    """Context of a sent widget: a widget_query carries no state of its own."""
+
+    __tablename__ = "widget_messages"
+
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    message_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    context: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    rev: Mapped[int] = mapped_column(server_default=text("0"))
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

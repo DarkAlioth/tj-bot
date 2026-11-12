@@ -71,6 +71,7 @@ async def session() -> AsyncGenerator[AsyncSession]:
             "bot_users",
             "download_events",
             "favorites",
+            "widget_messages",
         ):
             await db_session.execute(text(f"TRUNCATE {table} CASCADE"))
         await db_session.commit()
@@ -453,3 +454,42 @@ async def test_download_events_and_activity(session: AsyncSession) -> None:
 
     srch = await repo.get_user_searches(300)
     assert srch[0][0] == "movie"
+
+
+async def test_widget_message_roundtrip(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.save_widget_message(1, 10, "search", {"qh": "abcd", "i": 0}, rev=1)
+    await repo.save_widget_message(1, 10, "search", {"qh": "abcd", "i": 2}, rev=3)
+    row = await repo.get_widget_message(1, 10)
+    assert row is not None
+    assert row.context == {"qh": "abcd", "i": 2}
+    assert row.rev == 3
+    assert await repo.update_widget_message(1, 10, rev=4) is True
+    assert await repo.update_widget_message(1, 99, rev=4) is False
+    refreshed = await repo.get_widget_message(1, 10)
+    assert refreshed is not None and refreshed.rev == 4
+    assert [m.message_id for m in await repo.widget_messages_of_kind("search")] == [10]
+    await repo.delete_widget_message(1, 10)
+    assert await repo.get_widget_message(1, 10) is None
+
+
+async def test_widget_messages_purged_with_history(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.save_widget_message(1, 10, "hub", {})
+    await session.execute(
+        text("UPDATE widget_messages SET updated_at = now() - interval '40 days'")
+    )
+    await repo.delete_stale(
+        cache_ttl=datetime.timedelta(days=7), history_ttl=datetime.timedelta(days=30)
+    )
+    assert await repo.get_widget_message(1, 10) is None
+
+
+async def test_classic_ui_flag(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.touch_user(5, "u", "User")
+    assert await repo.uses_classic_ui(5) is False
+    await repo.set_classic_ui(5, True)
+    assert await repo.uses_classic_ui(5) is True
+    await repo.set_classic_ui(404, True)
+    assert await repo.uses_classic_ui(404) is False

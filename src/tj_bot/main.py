@@ -27,11 +27,13 @@ from tj_bot.db.maintenance import cleanup_loop
 from tj_bot.db.migrate import run_migrations
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers import routers_list
+from tj_bot.handlers.widgets_search import register_enrichment_push
 from tj_bot.middlewares.access import AccessMiddleware
 from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
 from tj_bot.middlewares.throttling import ThrottlingMiddleware
 from tj_bot.services import broadcaster
+from tj_bot.services.enrichment import NullEnricher
 from tj_bot.services.favorites_watcher import favorites_watch_loop
 from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import JackettClient
@@ -142,6 +144,9 @@ async def main(settings: Settings) -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp["jackett"] = jackett
     dp["qbit"] = qbit
+    # the enrichment service registers itself under "enricher" when enabled
+    dp["enricher"] = dp.get("enricher") or NullEnricher()
+    register_enrichment_push(bot, session_pool, dp["enricher"])
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
     dp.include_routers(*routers_list)
     dp.update.outer_middleware(WidgetQueryMiddleware(dp))

@@ -248,6 +248,7 @@ async def test_monitor_loop_sleeps_first_and_carries_state(
         qbit: object,
         config: object,
         known: dict[str, Problem] | None,
+        state: object = None,
     ) -> dict[str, Problem]:
         order.append("check")
         states.append(known)

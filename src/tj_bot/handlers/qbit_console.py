@@ -31,6 +31,7 @@ qbit_router = Router()
 PAGE_SIZE = 6
 NAME_LIMIT = 34
 UNAVAILABLE_TEXT = "qBittorrent недоступен 🛠"
+NOT_CONFIGURED_TEXT = "qBittorrent не настроен (см. QBIT_* в .env)."
 
 
 qbit_router.message.filter(AdminOnly())
@@ -241,7 +242,7 @@ async def render_card(
 @qbit_router.message(Command("dl"))
 async def qbit_menu(message: Message, qbit: QbittorrentClient | None) -> None:
     if qbit is None:
-        await message.answer(padded("qBittorrent не настроен (см. QBIT_* в .env)."))
+        await message.answer(padded(NOT_CONFIGURED_TEXT))
         return
     try:
         await render_list(message, qbit, 0, "all", edit=False)

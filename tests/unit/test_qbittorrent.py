@@ -168,6 +168,7 @@ async def test_console_endpoints(
         torrents__start=action,
         torrents__delete=action,
         torrents__setForceStart=action,
+        torrents__recheck=action,
         torrents__topPrio=action,
     )
     client = await qbit_env(app)
@@ -186,6 +187,8 @@ async def test_console_endpoints(
     await client.delete_torrents("h1", delete_files=True)
     assert calls["/api/v2/torrents/delete"]["deleteFiles"] == "true"
     await client.set_force_start("h1", True)
+    await client.recheck_torrents("h1")
+    assert calls["/api/v2/torrents/recheck"] == {"hashes": "h1"}
     await client.change_priority("topPrio", "h1")
     assert calls["/api/v2/torrents/topPrio"] == {"hashes": "h1"}
 

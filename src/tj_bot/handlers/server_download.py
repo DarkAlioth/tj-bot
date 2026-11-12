@@ -23,6 +23,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
+from tj_bot.handlers.widgets_server import send_picker_widget
 from tj_bot.services.download_watcher import watch_download
 from tj_bot.services.feedback import ack_silent, alert_or_message
 from tj_bot.services.formatting import DOWNLOADING_STATES, format_size, padded
@@ -270,27 +271,49 @@ async def _safe_edit(
         logger.debug("File picker edit skipped")
 
 
+def chat_user_id(message: Message) -> int:
+    """The acting user: the sender, or the chat itself for a bot-built message.
+
+    Widget flows pass a synthetic message of the private chat, whose id is the
+    user's id.
+    """
+    return message.from_user.id if message.from_user else message.chat.id
+
+
+async def _report(query: CallbackQuery | None, message: Message, text: str) -> None:
+    """Error feedback: an alert for a callback, a chat message for a widget."""
+    if query is None:
+        await message.answer(padded(text))
+    else:
+        await alert_or_message(query, text)
+
+
 async def begin_torrent_send(
-    query: CallbackQuery,
+    query: CallbackQuery | None,
     message: Message,
     repo: TorrentRepo,
     jackett: JackettClient,
     qbit: QbittorrentClient,
     config: AppConfig,
+    bot: Bot,
     name: str,
     download_url: str,
 ) -> None:
-    """Fetch the .torrent, add it stopped and open the file picker."""
+    """Fetch the .torrent, add it stopped and open the file picker.
+
+    ``query`` is None for a widget request, which is answered before the
+    slow part starts; feedback then goes to the chat.
+    """
     # release the per-update transaction before slow tracker/qbit calls
     await repo.commit()
     try:
         content = await jackett.download(download_url)
     except DownloadTooLargeError:
-        await alert_or_message(query, "Файл слишком большой")
+        await _report(query, message, "Файл слишком большой")
         return
     except JackettError:
         logger.exception("Failed to fetch %r for the server download", name)
-        await alert_or_message(query, "Не удалось получить файл с трекера")
+        await _report(query, message, "Не удалось получить файл с трекера")
         return
     tag = new_tag()
     torrent_hash: str | None = None
@@ -308,7 +331,8 @@ async def begin_torrent_send(
             await qbit.add_tags(torrent_hash, tag)
         except QbittorrentError:
             logger.debug("Tagging the existing torrent failed", exc_info=True)
-        await ack_silent(query, "Уже в qBittorrent — открываю файлы")
+        if query is not None:
+            await ack_silent(query, "Уже в qBittorrent — открываю файлы")
     else:
         try:
             await qbit.add_torrent_file(
@@ -320,15 +344,50 @@ async def begin_torrent_send(
             )
         except QbittorrentError:
             logger.exception("Failed to add %r to qBittorrent", name)
-            await alert_or_message(query, QBIT_DOWN_TEXT)
+            await _report(query, message, QBIT_DOWN_TEXT)
             return
         torrent_hash = await _wait_for_metadata(qbit, tag, ADD_VISIBLE_TIMEOUT_SECONDS)
         if torrent_hash is None:
-            await alert_or_message(query, "qBittorrent не принял торрент")
+            await _report(query, message, "qBittorrent не принял торрент")
             return
-        await ack_silent(query)
-    status = await message.answer(padded("Загружаю список файлов…"))
-    await render_selection(status, qbit, torrent_hash, page=0)
+        if query is not None:
+            await ack_silent(query)
+    user_id = query.from_user.id if query is not None else chat_user_id(message)
+    await open_picker(message, repo, qbit, bot, torrent_hash, user_id)
+
+
+async def open_picker(
+    message: Message,
+    repo: TorrentRepo,
+    qbit: QbittorrentClient,
+    bot: Bot,
+    torrent_hash: str,
+    user_id: int,
+    status: Message | None = None,
+) -> None:
+    """The file picker: a widget, or the classic text screen for classic-UI users.
+
+    ``status`` is a placeholder message of the magnet flow: the text picker is
+    drawn into it, the widget flow replaces it.
+    """
+    if await repo.uses_classic_ui(user_id):
+        if status is None:
+            status = await message.answer(padded("Загружаю список файлов…"))
+        await render_selection(status, qbit, torrent_hash, page=0)
+        return
+    try:
+        sent = await send_picker_widget(bot, message.chat.id, repo, qbit, torrent_hash)
+    except QbittorrentError:
+        logger.exception("File picker widget failed")
+        await message.answer(padded(QBIT_DOWN_TEXT + " 🛠"))
+        return
+    if not sent:
+        await message.answer(padded(GONE_TEXT))
+    if status is not None:
+        try:
+            await status.delete()
+        except TelegramAPIError:
+            logger.debug("Magnet status message not deleted")
 
 
 async def begin_magnet_send(
@@ -336,6 +395,7 @@ async def begin_magnet_send(
     repo: TorrentRepo,
     qbit: QbittorrentClient,
     config: AppConfig,
+    bot: Bot,
     url: str,
 ) -> None:
     """Add a magnet, wait for its metadata and open the file picker."""
@@ -368,7 +428,9 @@ async def begin_magnet_send(
         await qbit.stop_torrents(torrent_hash)
     except QbittorrentError:
         logger.debug("Force-stop after metadata failed", exc_info=True)
-    await render_selection(status, qbit, torrent_hash, page=0)
+    await open_picker(
+        message, repo, qbit, bot, torrent_hash, chat_user_id(message), status
+    )
 
 
 async def _wait_for_metadata(

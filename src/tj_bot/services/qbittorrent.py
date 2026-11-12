@@ -257,6 +257,10 @@ class QbittorrentClient:
             data={"hashes": hashes, "deleteFiles": str(delete_files).lower()},
         )
 
+    async def recheck_torrents(self, hashes: str) -> None:
+        """Re-verify the data on disk ('h1|h2' or 'all'); the torrent stays stopped."""
+        await self._request("POST", "/api/v2/torrents/recheck", data={"hashes": hashes})
+
     async def set_force_start(self, hashes: str, value: bool) -> None:
         await self._request(
             "POST",

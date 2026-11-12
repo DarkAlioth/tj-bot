@@ -1,0 +1,96 @@
+<style>
+:root{--h:var(--tg-theme-hint-color);--b:var(--tg-theme-button-color);--s:var(--tg-theme-secondary-bg-color);--d:var(--tg-theme-destructive-text-color);--l:var(--tg-theme-section-separator-color);--w:var(--tg-theme-button-text-color);--t:var(--tg-theme-text-color);--a:var(--tg-theme-accent-text-color)}
+body{margin:0;padding:12px 14px max(12px,env(safe-area-inset-bottom),var(--tg-content-safe-area-inset-bottom,0px));font-variant-numeric:tabular-nums}
+button{font:inherit;border:0;transition:transform .12s}
+button:active{transform:scale(.97)}
+.t{font-size:1.05em;font-weight:650;line-height:1.25;max-height:2.5em;overflow:hidden}
+.m{font-size:.85em;color:var(--h)}
+.cd{background:var(--s);border-radius:12px;padding:9px 12px;margin-top:10px}
+.bar{height:6px;border-radius:3px;background:var(--l);margin-top:7px;overflow:hidden}
+.bar div{height:100%;border-radius:3px;background:var(--b);transition:width .4s,background .4s}
+.ov .bar div{background:var(--d)}
+.ov .fr{color:var(--d);font-weight:600}
+.cs{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.ch{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:999px;font-size:.8em;font-weight:600;background:var(--s);color:var(--tg-theme-subtitle-text-color)}
+.on{background:var(--b);color:var(--w)}
+.hd{display:flex;align-items:center;margin-top:8px;font-size:.75em;text-transform:uppercase;color:var(--h);font-weight:600}
+.hd b{flex:1}
+.ib{width:40px;height:32px;padding:0;background:none;color:var(--a);font-size:2em;line-height:1}
+svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;color:var(--h)}
+.df{display:none}
+#L{transition:transform .11s cubic-bezier(.2,.8,.2,1)}
+#L.j{transition:none}
+.o1{transform:translateX(-24px)}
+.o-1{transform:translateX(24px)}
+.wt{pointer-events:none}
+.r{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--l);cursor:pointer}
+.fh{padding:2px 0}
+.fh .nm{font-weight:600;font-size:.9em;color:var(--tg-theme-section-header-text-color)}
+.fh .ck{width:18px;height:18px;margin:2px}
+.nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.95em}
+.sz{font-size:.8em;color:var(--h);white-space:nowrap}
+.ck{width:22px;height:22px;flex:none;box-sizing:border-box;border-radius:7px;border:1.5px solid var(--h);display:flex;align-items:center;justify-content:center;color:var(--h);transition:background .15s,border-color .15s}
+.ck svg{width:15px;height:15px;stroke-width:2.5;display:none;color:inherit}
+.s .ck{background:var(--b);border-color:var(--b);color:var(--w)}
+.s .ck svg{display:block}
+.h .ck{border-color:var(--b)}
+.dots{display:inline-flex;gap:3px;align-items:center}
+.dots i{width:4px;height:4px;border-radius:50%;background:currentColor;animation:d .9s infinite}
+.dots i:nth-child(2){animation-delay:.15s}
+.dots i:nth-child(3){animation-delay:.3s}
+@keyframes d{0%,80%,100%{transform:scale(.5)}40%{transform:scale(1)}}
+.ft{display:flex;gap:8px;margin-top:10px}
+.p{flex:1}
+.g{background:var(--s);color:var(--t)}
+.dg{color:var(--d)}
+.q{flex:1;align-self:center;font-size:.9em;font-weight:600}
+.to{font-size:.85em;margin-top:6px;text-align:center;color:var(--h)}
+.to:empty{display:none}
+.ok{color:var(--a);font-weight:600}
+@media(prefers-reduced-motion:reduce){*{transition-duration:0s;animation-duration:0s}}
+</style>
+<svg class=df><symbol id=v viewBox="0 0 24 24"><rect x=3 y=5 width=18 height=14 rx=2 /><path d="M10 9l5 3-5 3z"/></symbol><symbol id=a viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx=6.5 cy=18 r=2.5 /><circle cx=16.5 cy=16 r=2.5 /></symbol><symbol id=s viewBox="0 0 24 24"><rect x=3 y=5 width=18 height=14 rx=2 /><path d="M7 12h6m-6 3h10"/></symbol><symbol id=r viewBox="0 0 24 24"><path d="M4 8h16v12H4zM2 4h20v4H2zm8 8h4"/></symbol><symbol id=o viewBox="0 0 24 24"><path d="M14 3H6v18h12V7zm0 0v4h4"/></symbol><symbol id=fo viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></symbol><symbol id=ok viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></symbol></svg>
+<div id=A></div><div id=L></div><div id=B></div>
+<script>
+const TW=window.TelegramWidget,$=i=>document.getElementById(i),A=$('A'),L=$('L'),B=$('B'),H=TW&&TW.HapticFeedback;
+const hap=(k,a)=>{try{H&&H[k](a)}catch{}};
+const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи',INVALID_ANSWER:'Ошибка ответа'};
+const CL={v:'Видео',a:'Аудио',s:'Субтитры',r:'Архивы',o:'Остальное'},DOTS='<span class=dots><i></i><i></i><i></i></span>';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+const fS=k=>{let v=k,i=0;while(v>=1024&&i<3){v/=1024;i++}return(i&&v<100?v.toFixed(1).replace('.',','):Math.round(v))+' '+['КБ','МБ','ГБ','ТБ'][i]};
+const nf=n=>{const m=n%10,h=n%100;return n+' файл'+(h>10&&h<20||!m||m>4?'ов':m==1?'':'а')};
+const I=n=>'<svg><use href="#'+n+'"/></svg>';
+let S={m:'pick',n:'',c:0,s:0,k:0,z:0,fs:-1,p:0,q:1,cl:[],d:[],f:[]},seen=-1,P={},busy='',cf=0,to=0,tt=0;
+function load(){try{const j=JSON.parse(TW.chatData);if(j&&(j.r|0)>=seen){Object.assign(S,j);seen=j.r|0;P={};P[S.p]=S.f}}catch{}}
+const bt=(a,l,c,dis)=>'<button class="'+c+'" data-a="'+a+'"'+(dis||busy?' disabled':'')+'>'+(busy==a?DOTS:l)+'</button>';
+function draw(){const s=S,ov=s.fs>=0&&s.fs<s.z,w=s.fs>0?Math.min(100,s.z/s.fs*100):s.s?s.z/s.s*100:0;
+let h='<div class=t>'+esc(s.n)+'</div><div class=m>';
+if(s.m!='pick'){A.innerHTML=h+(s.m=='go'?'<span class=ok>Запущено ✓</span> · прогресс ниже':s.m=='x'?'Удалено из qBittorrent':'Нет в qBittorrent')+'</div>';L.innerHTML=B.innerHTML='';return}
+h+='</div><div class="cd'+(ov?' ov':'')+'"><div class=m><span>Выбрано <b>'+s.k+'</b> из '+nf(s.c)+' · <b>'+fS(s.z)+'</b> из '+fS(s.s)+'</span>'+(s.fs<0?'':' · <span class=fr>'+(ov?'не хватает '+fS(s.z-s.fs):'свободно '+fS(s.fs))+'</span>')+'</div><div class=bar><div style="width:'+w.toFixed(1)+'%"></div></div></div>';
+h+='<div class=cs>'+bt('all','Все','ch'+(s.k==s.c?' on':''))+bt('none','Ничего','ch'+(s.k?'':' on'))+s.cl.map(c=>bt('qp:'+c[0],CL[c[0]]+' <span>'+(c[2]&&c[2]<c[1]?c[2]+'/':'')+c[1]+'</span>','ch'+(c[2]==c[1]?' on':''))).join('')+'</div>';
+A.innerHTML=h+'<div class=hd><b>Файлы</b>'+(s.q>1?bt('pv','‹','ib',s.p<1)+(s.p+1)+' / '+s.q+bt('nx','›','ib',s.p>=s.q-1):'')+'</div>';
+let l='',pf=-2;
+s.f.forEach(r=>{const[i,nm,sz,c,sel,fd]=r,d=s.d[fd];
+if(fd!=pf&&d){pf=fd;l+='<div class="r fh'+(d[2]>=d[1]?' s':d[2]?' h':'')+'" data-a="tf:'+fd+'">'+I('fo')+'<span class=nm>'+esc(d[0])+'</span><span class=sz>'+d[2]+'/'+d[1]+'</span><span class=ck>'+(busy=='tf:'+fd?DOTS:I('ok'))+'</span></div>'}
+l+='<div class="r'+(sel?' s':'')+'" data-a="tg:'+i+'">'+I(c in CL?c:'o')+'<span class=nm>'+esc(nm).replace(/S\d{1,2}E\d{1,3}/gi,'<b>$&</b>')+'</span><span class=sz>'+fS(sz)+'</span><span class=ck>'+(busy=='tg:'+i?DOTS:I('ok'))+'</span></div>'});
+L.innerHTML=l;L.classList.toggle('wt',!!busy);
+B.innerHTML='<div class=ft>'+(cf?'<span class="q dg">Удалить из qBittorrent?</span>'+bt('x','Да','g dg')+bt('cf0','Нет','g'):bt('go','Начать загрузку','p',!s.k)+bt('cf1','Отмена','g dg'))+'</div><div class="to '+(to?to[1]:'')+'">'+(to?to[0]:'')+'</div>'}
+function toast(t,c){to=[t,c];draw();clearTimeout(tt);tt=setTimeout(()=>{to=0;draw()},c?3e3:1600)}
+function flip(r){r[4]^=1;S.k+=r[4]?1:-1;S.z+=r[4]?r[2]:-r[2]}
+function req(a,o){if(!TW)return;busy=a;draw();
+TW.request(a).then(x=>{busy='';let j=null;try{j=JSON.parse(x.result)}catch{}
+if(j&&j.err){toast(j.err,'dg');o.fail&&o.fail();return hap('notificationOccurred','error')}
+if(j&&(j.r|0)>=seen){if(o.bulk)P={};Object.assign(S,j);seen=j.r|0;P[S.p]=S.f}
+o.ok&&o.ok();o.dir?slide(o.dir):draw()},
+e=>{busy='';toast(ERR[e.code]||'Ошибка связи','dg');o.fail&&o.fail();hap('notificationOccurred','error')})}
+function slide(d){if(!d)return draw();L.classList.add('o'+d);setTimeout(()=>{L.classList.remove('o'+d);L.classList.add('j','o'+-d);draw();L.offsetWidth;L.classList.remove('j','o'+-d)},110)}
+function page(n,d){if(n<0||n>=S.q||busy)return;hap('selectionChanged');if(P[n]){S.p=n;S.f=P[n];slide(d)}else req('pg:'+n,{dir:d})}
+document.body.onclick=e=>{const el=e.target.closest('[data-a]');if(!el||el.disabled||busy)return;const a=el.dataset.a;
+if(a=='cf1'||a=='cf0'){cf=+a[2];return draw()}
+if(a=='pv'||a=='nx')return page(S.p+(a=='nx'?1:-1),a=='nx'?1:-1);
+hap('impactOccurred','light');
+if(a.startsWith('tg:')){const r=S.f.find(x=>x[0]==+a.slice(3));r&&flip(r);return req(a,{fail(){r&&flip(r);draw()}})}
+cf=0;req(a,{bulk:a!='go',ok(){a.length<3&&hap('notificationOccurred','success')}})};
+if(TW){load();TW.onEvent('chatDataChanged',()=>{load();draw()})}
+draw();TW&&TW.ready&&TW.ready();
+</script>

@@ -1,0 +1,85 @@
+<style>
+body{margin:0;padding:12px 14px max(12px,var(--tg-content-safe-area-inset-bottom,0px))}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;height:40px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color);transition:transform .12s}
+button:active{transform:scale(.97)}
+button[disabled]{opacity:1;color:var(--tg-theme-hint-color)}
+.g{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+.cd .g{background:var(--tg-theme-bg-color)}
+.d{color:var(--tg-theme-destructive-text-color)}
+.w{width:100%;margin-top:10px}
+.pg button{width:40px}
+.tb{display:flex;gap:6px;margin-bottom:12px}
+.ch{display:inline-flex;align-items:center;max-width:100%;padding:2px 9px;border-radius:999px;font-size:.8em;font-weight:600;line-height:1.6;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-subtitle-text-color)}
+.ch span,.q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb .ch{flex:1;justify-content:center;padding:6px;font-size:.9em}
+.on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.ac{color:var(--tg-theme-accent-text-color)}
+.hd{text-transform:uppercase;font-weight:600;margin:12px 0 6px}
+.mt,.hd,.em{font-size:.85em;color:var(--tg-theme-hint-color)}
+.cd{background:var(--tg-theme-secondary-bg-color);border-radius:12px;padding:10px 12px;margin-top:12px}
+.hi{font-size:1.25em;font-weight:650;line-height:1.25}
+.cm{background:var(--tg-theme-bg-color);border-radius:8px;padding:9px 10px;user-select:text;-webkit-user-select:text}
+.cs{display:flex;flex-wrap:wrap;gap:6px}
+.cs .ch{padding:6px 10px;font-size:.85em;color:var(--tg-theme-text-color)}
+.ax,.r3{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:.9em}
+.ax button{height:36px}
+.r3{grid-template-columns:1fr 1fr 1fr;margin-top:12px;font-size:.85em}
+.rw{padding:8px 0;border-bottom:1px solid var(--tg-theme-section-separator-color)}
+.rw:last-child{border:0}
+.hr{display:flex;align-items:center;gap:8px}
+.q{flex:1;min-width:0}
+.m{flex:none;white-space:nowrap}
+.tt{font-weight:600;line-height:1.25;max-height:2.5em;overflow:hidden}
+.fl{float:right;margin:1px 0 0 6px}
+.o .rw:not(.x) .tt{white-space:nowrap;text-overflow:ellipsis}
+.bd{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;align-items:center}
+.pg{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px}
+.em{text-align:center;padding:28px 0}
+#t{min-height:18px;margin-top:8px;font-size:.85em;text-align:center}
+#c{animation:sl .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes sl{from{transform:translateX(var(--x));color:var(--tg-theme-hint-color)}}
+.n{font-variant-numeric:tabular-nums}
+.ds{display:inline-flex;gap:3px;align-items:center;height:1em;vertical-align:middle}
+.ds b{width:5px;height:5px;border-radius:50%;background:currentColor;animation:p 1s infinite}
+.ds b+b{animation-delay:.2s}.ds b+b+b{animation-delay:.4s}
+@keyframes p{0%,80%,100%{transform:scale(.5)}40%{transform:scale(1)}}
+.bz{pointer-events:none}
+@media (prefers-reduced-motion:reduce){#c,.ds b{animation:none}button{transition:none}}
+</style>
+<div class="tb" id="b"><span class="ch" data-a="t:m">Главная</span><span class="ch" data-a="t:h">История</span><span class="ch" data-a="t:f">Избранное</span></div><div id="c"></div><div id="t" class="ac"></div>
+<script>
+const TW=window.TelegramWidget,$=i=>document.getElementById(i);
+const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи',INVALID_ANSWER:'Ошибка ответа'};
+const OKT={h:'Результаты — ниже ↓',fd:'Файл отправлен'},EMP='сохраняйте из карточки поиска';
+let S={},R=-1,busy=0,op=0,det={},cf='',tm=0;
+const pj=s=>{try{return JSON.parse(s)}catch(e){}};
+const esc=s=>(s==null?'':s+'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+const ago=a=>typeof a=='string'?esc(a):a<1?'только что':a+' мин назад';
+const hap=(k,v)=>{try{TW.HapticFeedback[k](v)}catch(e){}};
+function toast(s,e){const t=$('t');t.textContent=s;t.className=e?'d':'ac';clearTimeout(tm);tm=setTimeout(()=>t.textContent='',e?3e3:1600)}
+const fail=s=>{hap('notificationOccurred','error');toast(s,1)};
+function apply(j,d){if(j.r!=null){if(j.r<R)return;R=j.r}Object.assign(S,j);op=0;cf='';draw(d)}
+const ch=(c,t,a)=>'<span class="ch'+c+'"'+(a?' data-a="'+a+'"':'')+'>'+t+'</span>';
+const bt=(c,a,t,x)=>'<button class="'+c+'" data-a="'+a+'"'+(x||'')+'>'+t+'</button>';
+const mk=v=>v?'<b class="ac">✓</b>':'<b class="d">✗</b>';
+function vMain(){const n=TW&&TW.viewer&&TW.viewer.first_name,h=S.h||[],fn=S.fn|0,fu=S.fu|0,st=S.st;let o='<div class="hi">Привет'+(n?', '+esc(n):'!')+'</div><div class="cd">Напишите <b>/s</b> и название<div class="hr" style="margin-top:8px"><code class="cm q"><b class="ac">/s</b> дюна 2024</code>'+bt('g','cp','Скопировать /s')+'</div></div>';
+if(h.length)o+='<div class="hd">Недавние запросы</div><div class="cs">'+h.slice(0,5).map(x=>ch('','<span>'+esc(x.q)+'</span>','h:'+x.i)).join('')+'</div>';
+o+='<div class="cd hr" data-a="t:f"><span class="ac" style="font-size:1.5em">★</span><div class="q"><b>'+(fn?fn+' в избранном':'Избранное пусто')+'</b><div class="mt">'+(fu?'<b class="ac">'+fu+(fu%10==1&&fu%100!=11?' обновился':' обновились')+' на трекере</b>':fn?'':EMP)+'</div></div></div>';
+if(S.adm)o+='<div class="r3">'+bt('g','con','Консоль')+bt('g','dash','Панель')+bt('g','usr','Пользователи')+'</div>';
+if(st)o+='<div class="mt n w">Jackett '+mk(st.j)+' · qBittorrent '+mk(st.q)+(st.w?' · '+esc(st.w):'')+'</div>';return o}
+const conf=(q,v)=>'<div class="cd hr"><span class="q">'+q+'</span>'+bt('d g',v,'Да')+bt('g','no','Нет')+'</div>';
+function vHist(){const h=S.h||[];return h.length?'<div>'+h.map(x=>'<div class="rw hr" data-a="h:'+x.i+'"><span class="q">'+esc(x.q)+'</span><span class="m mt n">'+(x.n|0)+' · '+ago(x.a)+'</span></div>').join('')+'</div>'+(cf=='hc'?conf('Очистить историю?','hc'):bt('g d w','cf:hc','Очистить историю')):'<div class="em">История пуста — начните с /s</div>'}
+function vFav(){const f=S.f||[],u=S.ff=='u',fn=S.fn|0,fu=S.fu|0,pp=Math.max(1,Math.ceil((u?fu:fn)/4)),p=S.fp|0;let o='<div class="cs">'+ch(u?'':' on','Все '+fn,'ff:a')+ch(u?' on':'','Обновлённые '+fu,'ff:u')+'</div>';
+o+=f.length?'<div>'+f.map(x=>{const d=det[x.i],i=x.i;return'<div class="rw'+(op==i?' x':'')+'" data-a="o:'+i+'"><div class="tt">'+(x.u?ch(' on fl','обновлено'):'')+esc(x.n)+'</div><div class="bd n">'+ch('',esc(x.t))+'<span class="mt">'+esc(x.m)+'</span></div>'+(op==i?cf=='fr:'+i?conf('Убрать из избранного?','fr:'+i):'<div class="ax">'+bt('','fd:'+i,'Скачать')+(S.adm?bt('g','fs:'+i,'На сервер'):'')+(/^https:\/\//.test(d.l)?bt('g','ln:'+esc(d.l),'На трекере ↗'):'')+bt('g d','cf:fr:'+i,'Убрать')+'</div>':'')+'</div>'}).join('')+'</div>':'<div class="em">'+(u?'Пока нет обновлений':'Избранное пусто — '+EMP)+'</div>';
+if(pp>1)o+='<div class="pg n">'+bt('g','fp:'+(p-1),'‹',p?'':' disabled')+'<span class="mt">'+(p+1)+' / '+pp+'</span>'+bt('g','fp:'+(p+1),'›',p<pp-1?'':' disabled')+'</div>';return o}
+function draw(d){const tb=S.tb||'m',c=document.createElement('div');c.id='c';c.className=op?'o':'';c.style.cssText='--x:'+(d|0)*24+'px';for(const e of $('b').children)e.classList.toggle('on',e.dataset.a=='t:'+tb);c.innerHTML=tb=='h'?vHist():tb=='f'?vFav():vMain();$('c').replaceWith(c);if(d)hap('selectionChanged')}
+function req(v,el,d){if(!TW)return;busy=1;document.body.classList.add('bz');const t=el.querySelector('.m')||el,h=t.innerHTML;t.innerHTML='<i class="ds"><b></b><b></b><b></b></i>';const done=()=>{busy=0;document.body.classList.remove('bz');if(t.isConnected)t.innerHTML=h};
+TW.request(v).then(a=>{done();const j=pj(a.result)||{},k=v.split(':')[0];if(j.err)return fail(j.err);if(k=='fo'){det[v.slice(3)]=j;op=+v.slice(3);cf='';draw()}else if(j.tb)apply(j,d);if(j.ok){toast(OKT[k]||'Открываю…');hap('notificationOccurred','success')}},e=>{done();fail(ERR[e.code]||ERR.FAILED)})}
+document.body.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el||busy||el.disabled)return;const a=el.dataset.a,[k,x]=a.split(/:(.*)/),tb=S.tb||'m';
+if(k=='cp')return TW&&TW.copyText('/s ');
+if(k=='ln')return TW&&TW.openLink(x);
+if(k=='cf'||k=='no')cf=x||'';else if(k=='o'){const i=+x;if(op!=i&&!det[i])return req('fo:'+i,el);op=op==i?0:i;cf=''}else if(k=='t'){if(x!=tb)req(a,el,Math.sign('mhf'.indexOf(x)-'mhf'.indexOf(tb)));return}else return req(a,el,k=='fp'?Math.sign(+x-(S.fp|0)):0);draw();hap('impactOccurred','light')});
+function load(){const j=TW&&pj(TW.chatData);if(j&&(j.r|0)>R){S={};apply(j,0)}}
+if(TW)TW.onEvent('chatDataChanged',load);
+load();if(R<0)draw(0);try{TW.ready()}catch(e){}
+</script>

@@ -1,0 +1,83 @@
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:12px 14px max(12px,env(safe-area-inset-bottom))}
+button{font:inherit;cursor:pointer;border:0;transition:transform .12s}
+button:active{transform:scale(.97)}
+.gh{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+.dn,.er{color:var(--tg-theme-destructive-text-color)}
+.hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.hd b{font-size:1.05em;font-weight:650}
+.hn{font-size:.85em;color:var(--tg-theme-hint-color)}
+#mt{flex:1;text-align:right}
+#mt,.nm,.al,.mn .hn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb{display:flex;gap:4px;margin-bottom:6px}
+.ch{height:30px;padding:0 8px;border-radius:999px;font-size:.75em;white-space:nowrap;font-weight:600;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-subtitle-text-color)}
+.ch i{font-style:normal;font-weight:400;margin-left:4px}
+.on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.ur{display:flex;align-items:center;gap:10px;padding:6px 0;min-height:46px}
+.ur+.ur,.dt+.ur{border-top:1px solid var(--tg-theme-section-separator-color)}
+.av{width:32px;height:32px;border-radius:50%;color:#fff;font-size:.75em;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.mn{flex:1;min-width:0}
+.nm{font-weight:600}
+.bd{display:inline-block;padding:0 6px;border-radius:999px;font-size:.7em;font-weight:600;background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color);vertical-align:2px;margin-left:4px}
+.k{background:var(--tg-theme-destructive-text-color)}
+.ct{font-size:.75em;color:var(--tg-theme-hint-color);font-variant-numeric:tabular-nums;text-align:right;line-height:1.5;flex:none}
+svg{width:12px;height:12px;vertical-align:-1px;margin-right:2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.x .ur:not(.o){min-height:0;padding:4px 0}
+.x .ur:not(.o) .av{width:22px;height:22px;font-size:.6em}
+.x .ur:not(.o) .hn,.x .ur:not(.o) .ct,.x .ur:not(.o) .bd,.a .ur:not(.o),.a .pg{display:none}
+.dt{padding:4px 0 8px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.g2 button{padding:0 6px;white-space:nowrap}
+.w{grid-column:1/-1;width:100%}
+.lb{font-size:.75em;letter-spacing:.04em;text-transform:uppercase;color:var(--tg-theme-hint-color);font-weight:600;margin:8px 0 2px}
+.al{font-size:.85em;padding:2px 0}
+.pg{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:8px}
+.pg button{width:44px;height:36px;border-radius:10px;font-size:1.2em}
+.dots{display:none;gap:3px;vertical-align:middle;margin-left:6px}
+.dots i{width:5px;height:5px;border-radius:50%;background:currentColor;animation:p 1s infinite}
+[disabled] .dots{display:inline-flex}
+@keyframes p{0%,80%,100%{transform:scale(.5)}40%{transform:scale(1)}}
+.em{text-align:center;padding:28px 0}
+@media (prefers-reduced-motion:reduce){*{transition:none;animation:none}}
+</style>
+<svg style="position:absolute;width:0;height:0"><symbol id="s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol><symbol id="d" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M4 20h16"/></symbol></svg>
+<div class="hd"><b>Пользователи</b><span class="hn" id="mt"></span></div>
+<div class="tb" id="tb"></div>
+<div id="l"></div>
+<script>
+const TW=window.TelegramWidget,$=i=>document.getElementById(i),D='<b class="dots"><i></i><i style="animation-delay:.15s"></i><i style="animation-delay:.3s"></i></b>';
+const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи'};
+const TABS=[['a','Все'],['r','Обычные'],['m','Админы'],['b','Блок']];
+let S={},R=-1,busy=0,tt=0,op=null,cf=0,act=null;
+const esc=s=>(s+'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+const nf=n=>String(+n||0).replace(/\B(?=(\d{3})+$)/g,' ');
+const ini=n=>(n+'').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+const dm=m=>new Date(m*6e4).toLocaleDateString('ru');
+const ts=m=>new Date(m*6e4).toLocaleString('ru',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+const rel=m=>{const d=Date.now()/6e4-m|0;if(d<1)return'только что';if(d<60)return d+' мин назад';const x=new Date(m*6e4),k=(new Date().setHours(0,0,0,0)-new Date(m*6e4).setHours(0,0,0,0))/864e5;return k<1?'сегодня '+x.toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}):k<2?'вчера':dm(m)};
+function parse(){try{const o=JSON.parse(TW?TW.chatData:null);if(o&&o.r>=R){S=o;R=o.r;return 1}}catch(e){}return 0}
+function toast(s,er){const m=$('mt');m.textContent=s;m.className=er?'hn er':'hn';clearTimeout(tt);tt=setTimeout(()=>{m.textContent=''},er?2600:1600);try{TW.HapticFeedback.notificationOccurred(er?'error':'success')}catch(e){}}
+function bt(a,l,c){return'<button class="'+(c||'gh')+'" data-a="'+a+'">'+l+D+'</button>'}
+function row(r){const[id,nm,un,f,ls,fs,sc,dl]=r,o=id==op;
+let h='<div class="ur'+(o?' o':'')+'" data-a="o:'+id+'"><span class="av" style="background:hsl('+id*137%360+',55%,45%)">'+esc(ini(nm))+'</span><div class="mn"><div class="nm">'+esc(nm)+(f&2?'<span class="bd">супер</span>':f&1?'<span class="bd">админ</span>':'')+(f&4?'<span class="bd k">блок</span>':'')+'</div><div class="hn">'+(un?'@'+esc(un)+' · ':'')+rel(ls)+'</div></div><div class="ct"><svg><use href="#s"/></svg>'+nf(sc)+'<br><svg><use href="#d"/></svg>'+nf(dl)+'</div></div>';
+if(!o)return h;const me=TW&&TW.viewer&&TW.viewer.id==id;h+='<div class="dt"><div class="hn">впервые '+dm(fs)+' · ID '+id+'</div>';
+if(act){const li=L=>L.length?L.map(x=>'<div class="al"><span class="hn">'+ts(x[1])+'</span> '+esc(x[0])+(x[2]=='s'?' <span class="hn">· на сервер</span>':'')+'</div>').join(''):'<div class="hn">нет</div>';
+h+='<div class="lb">Запросы</div>'+li(act.s||[])+'<div class="lb">Скачивания</div>'+li(act.d||[])+'<div class="g2">'+bt('ah','Скрыть','gh w')+'</div>'}
+else if(cf)h+='<div class="hn" style="margin-top:6px">Заблокировать пользователя?</div><div class="g2">'+bt('blk:'+id+':1','Заблокировать','gh dn')+bt('cf:0','Отмена')+'</div>';
+else{h+='<div class="g2">';if(!(f&2)&&!me){h+=f&4?bt('blk:'+id+':0','Разблокировать'):f&1?'':bt('cf:1','Заблокировать','gh dn');h+=f&1?bt('adm:'+id+':0','Снять админа'):bt('adm:'+id+':1','В админы')}
+h+=bt('act:'+id,'Активность','w')+'</div>'}
+return h+'</div>'}
+function draw(){const u=S.u||[],c=S.c||[],n=S.n||1,p=S.p||0;
+$('tb').innerHTML=TABS.map((x,i)=>'<button class="ch'+(x[0]==S.g?' on':'')+'" data-a="t:'+x[0]+'">'+x[1]+'<i>'+nf(c[i])+'</i></button>').join('');
+const l=$('l'),has=u.some(r=>r[0]==op);l.className=has?'x'+(act?' a':''):'';
+l.innerHTML=(u.length?u.map(row).join(''):'<div class="hn em">В этой группе пока никого</div>')+(n>1?'<div class="pg"><button class="gh" data-a="pg:'+S.g+':'+(p-1)+'"'+(p<1?' disabled':'')+'>‹</button><span class="hn">'+(p+1)+' / '+n+'</span><button class="gh" data-a="pg:'+S.g+':'+(p+1)+'"'+(p>=n-1?' disabled':'')+'>›</button></div>':'')}
+onclick=e=>{const b=e.target.closest('[data-a]');if(!b)return;const v=b.dataset.a.split(':'),k=v[0],a=v[1];
+if(k=='o'){op=op==+a?null:+a;cf=0;act=null;return draw()}if(k=='cf'){cf=+a;return draw()}if(k=='ah'){act=null;return draw()}
+if(!TW)return;if(busy)return toast(ERR.BUSY,1);busy=1;b.disabled=true;if(k=='t'||k=='pg')toast('Загружаю…');
+TW.request(b.dataset.a).then(r=>{busy=0;b.disabled=false;let o={};try{o=JSON.parse(r.result)||{}}catch(e){}
+if(o.err)return toast(o.err,1);if(k=='act'){act=o.a||{};return draw()}if(o.r<R)return;
+if(o.r!=null){S=o;R=o.r}if(k!='blk'&&k!='adm'){op=null;$('mt').textContent=''}cf=0;draw();if(o.m)toast(o.m)},e=>{busy=0;b.disabled=false;toast(ERR[e.code]||ERR.FAILED,1)})};
+parse();draw();
+if(TW){TW.onEvent('chatDataChanged',()=>{if(parse())draw()});TW.ready&&TW.ready()}
+</script>

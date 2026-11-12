@@ -1,0 +1,84 @@
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:12px 14px max(12px,env(safe-area-inset-bottom))}
+button{font:inherit;cursor:pointer;border:0;transition:transform .12s}
+button:active{transform:scale(.97)}
+.w{width:100%;margin-top:10px}
+.hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.hd b{font-size:1.05em;font-weight:650}
+.hn{font-size:.85em;color:var(--tg-theme-hint-color)}
+.er{color:var(--tg-theme-destructive-text-color)}
+.dt{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--tg-theme-accent-text-color);flex:none}
+.st{background:var(--tg-theme-destructive-text-color)}
+.tb{display:flex;gap:6px;margin-bottom:12px}
+.ch{height:30px;padding:0 12px;border-radius:999px;font-size:.8em;font-weight:600;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-subtitle-text-color)}
+.on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.tl{background:var(--tg-theme-secondary-bg-color);border-radius:12px;padding:10px 12px;min-width:0}
+.g1{display:grid;gap:8px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.lb{font-size:.75em;letter-spacing:.04em;text-transform:uppercase;color:var(--tg-theme-hint-color);font-weight:600}
+.h2{margin:12px 0 6px}
+.nm{font-size:1.1em;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.br{height:5px;border-radius:3px;background:var(--tg-theme-bg-color);margin-top:8px;overflow:hidden}
+.br i{display:block;height:100%;border-radius:3px;background:var(--tg-theme-button-color)}
+.dd{display:flex;gap:4px;margin:6px 0 4px}
+.dots{display:none;gap:3px;vertical-align:middle;margin-left:6px}
+.dots i{width:5px;height:5px;border-radius:50%;background:currentColor;animation:p 1s infinite}
+[disabled] .dots{display:inline-flex}
+@keyframes p{0%,80%,100%{transform:scale(.5)}40%{transform:scale(1)}}
+svg{display:block;width:100%;height:50px}
+rect{fill:var(--tg-theme-button-color)}
+.g7{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:.7em;color:var(--tg-theme-hint-color)}
+.sl{color:var(--tg-theme-text-color);font-weight:600}
+.rw{display:flex;align-items:center;gap:8px;width:100%;height:26px;padding:0 8px;border-radius:6px;background:linear-gradient(90deg,var(--tg-theme-secondary-bg-color) var(--p),transparent var(--p));color:inherit;font-size:.9em;text-align:left}
+.rw span,#mt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mt{text-align:right}
+.rw b,.ic{font-variant-numeric:tabular-nums;color:var(--tg-theme-hint-color);flex:none}
+.ir{display:flex;align-items:center;gap:10px;padding:7px 0}
+.ir+.ir{border-top:1px solid var(--tg-theme-section-separator-color)}
+.in{flex:1;min-width:0;font-weight:600}
+.ie{font-size:.8em;font-weight:400;color:var(--tg-theme-destructive-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.x .ie{white-space:normal}
+@media (prefers-reduced-motion:reduce){*{transition:none;animation:none}}
+</style>
+<div class="hd"><b>Панель</b><span class="hn" id="mt" data-a="rf"></span></div>
+<div class="tb" id="tb"><button class="ch" data-a="t:h">Состояние</button><button class="ch" data-a="t:s">Статистика</button><button class="ch" data-a="t:i">Индексеры</button></div>
+<div id="c"></div>
+<script>
+const TW=window.TelegramWidget,$=i=>document.getElementById(i),D='<b class="dots"><i></i><i style="animation-delay:.15s"></i><i style="animation-delay:.3s"></i></b>',EM='<div class="hn">Нет данных</div>';
+const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи'};
+let S={},R=-1,tab='h',busy=0,chk=0,ct=0,tmr=0,lb=0,lo=Date.now(),tt=0;
+const esc=s=>(s+'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+const nf=n=>String(Math.round(+n||0)).replace(/\B(?=(\d{3})+$)/g,' ');
+const sz=b=>{let i=0;for(b=+b||0;b>=1024&&i<4;i++)b/=1024;return(i&&b<100?b.toFixed(1).replace('.',','):Math.round(b))+' '+'Б,КБ,МБ,ГБ,ТБ'.split(',')[i]};
+const sp=b=>b>0?sz(b)+'/с':'0';
+const tm=t=>new Date(t*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const up=s=>s<86400?(s/3600|0)+' ч '+(s/60%60|0)+' м':(s/86400|0)+' д '+(s/3600%24|0)+' ч';
+const T=(l,v,x,a)=>'<div class="tl"'+(a||'')+'><div class="lb">'+l+'</div><div class="nm">'+v+'</div>'+(x||'')+'</div>';
+const B=f=>'<div class="br"><i style="width:'+Math.round(f&&f[1]?100-f[0]/f[1]*100:0)+'%"></i></div>';
+const ok=L=>L.filter(x=>!x[2]).length+' / '+L.length+' в строю';
+function parse(){try{const o=JSON.parse(TW?TW.chatData:null);if(o&&o.r>=R){S=o;R=o.r;return 1}}catch(e){}return 0}
+function hdr(){if(tt)return;const m=$('mt'),st=Date.now()-lo>9e4;m.textContent=st?'обновить':S.t?'обновлено '+tm(S.t):'';m.className=st?'hn er':'hn'}
+function toast(s,er){const m=$('mt');m.textContent=s;m.className=er?'hn er':'hn';clearTimeout(tt);tt=setTimeout(()=>{tt=0;hdr()},er?2600:1600);try{TW.HapticFeedback.notificationOccurred(er?'error':'success')}catch(e){}}
+function fail(e){toast(ERR[e.code]||ERR.FAILED,1)}
+function rH(){const h=S.h||{},q=h.q,L=S.i||[],s=h.sc,f=q&&q.f||[0,0];
+$('c').innerHTML='<div class="g1"><div class="g3">'+T('Аптайм',up(h.up||0))+T('БД',sz(h.db))+T('Диск',sz((h.df||[0])[0]),B(h.df))+'</div>'+T('qBittorrent',q?nf(q.a)+'<span class="hn"> акт. / '+nf(q.n)+'</span>':'<span class="er">недоступен</span>',q?'<div class="hn">↓ '+sp(q.d)+' · ↑ '+sp(q.u)+'</div>'+B(f)+'<div class="hn">свободно '+sz(f[0])+'</div>':'')+T('Индексеры',ok(L),'<div class="dd">'+L.map(x=>'<i class="dt'+(x[2]?' st':'')+'"></i>').join('')+'</div><div class="hn">проверено '+tm(h.m)+'</div>',' data-a="t:i"')+(s?T('Обогащение','постеров '+nf(s.p),'<div class="hn">очередь '+nf(s.q)+' · ошибок '+nf(s.e)+' за сутки</div>'):'')+'</div>'}
+function rS(){const s=S.s||{},d=s.d7||[],mx=Math.max(1,...d),t=s.top||[],m=t.length?t[0][1]:1;
+$('c').innerHTML='<div class="lb">За 7 дней</div><div class="g7">'+d.map(v=>'<b>'+nf(v)+'</b>').join('')+'</div><svg viewBox="0 0 70 50" preserveAspectRatio="none">'+d.map((v,i)=>{const h=Math.max(1,v/mx*50);return'<rect x="'+(i*10+1)+'" y="'+(50-h)+'" width="8" height="'+h+'"/>'}).join('')+'</svg><div class="g7">'+d.map((v,i)=>'<span'+(i==6?' class="sl"':'')+'>'+new Date((S.t||0)*1000-(6-i)*864e5).toLocaleDateString('ru',{weekday:'short'})+'</span>').join('')+'</div><div class="hn">'+[[s.ev,'поисков · '],[s.us,'активных<br>в кэше '],[s.tc,'раздач · '],[s.qc,'выдач']].map(x=>'<b>'+nf(x[0])+'</b> '+x[1]).join('')+'</div><div class="lb h2">Топ запросов</div>'+(t.length?t.map((x,i)=>'<button class="rw" data-a="q:'+i+'" style="--p:'+Math.round(x[1]/m*100)+'%"><span>'+esc(x[0])+'</span><b>'+nf(x[1])+'</b>'+D+'</button>').join(''):EM)}
+function rI(){const L=S.i||[],h=S.h||{};
+$('c').innerHTML='<div class="hd"><b>'+ok(L)+'</b><span class="hn">проверено '+tm(h.m)+'</span></div>'+(L.length?L.map(x=>{const e=x[2];return'<div class="ir"'+(e?' data-a="x"':'')+'><i class="dt'+(e?' st':'')+'"></i><div class="in">'+esc(x[0])+(e?'<div class="ie">'+esc(e)+'</div>':'')+'</div><div class="ic">'+(e?'':nf(x[1]))+'</div></div>'}).join(''):EM)+'<button class="w" data-a="chk"'+(chk==1?' disabled':'')+'>'+(chk==1?'Проверяю… до 30 с':chk==2?'Повторить':'Проверить сейчас')+D+'</button>'}
+function setChk(n){chk=n;clearTimeout(ct);if(n==1)ct=setTimeout(()=>{setChk(2);toast('Не дождался ответа',1)},45000);if(tab=='i')rI()}
+function draw(){hdr();for(const b of $('tb').children)b.classList.toggle('on',b.dataset.a=='t:'+tab);(tab=='h'?rH:tab=='s'?rS:rI)()}
+function apply(res){let a;try{a=JSON.parse(res)}catch(e){return}if(!a)return;if(a.err)return toast(a.err,1);if(a.r<R)return;if(a.r>R)R=a.r;
+for(const k of'hsit')if(k in a)S[k]=a[k];if(tab=='h')rH();else if(tab=='i'&&'i'in a)rI();hdr()}
+function bg(m){if(!TW||busy)return;if(!m&&(!TW.isActive||Date.now()-lb<4900))return;lb=Date.now();busy=1;
+TW.request('bg').then(a=>{busy=0;lo=Date.now();apply(a.result)},e=>{busy=0;if(m==1)fail(e);else if(e.code=='NOT_ALLOWED')clearInterval(tmr);hdr()})}
+function start(){clearInterval(tmr);tmr=setInterval(bg,5000)}
+function req(d,b,f){busy=1;if(b)b.disabled=true;TW.request(d).then(a=>{busy=0;if(b)b.disabled=false;let o={};try{o=JSON.parse(a.result)||{}}catch(e){}f(o)},e=>{busy=0;if(b)b.disabled=false;setChk(0);fail(e)})}
+onclick=e=>{const b=e.target.closest('[data-a]');if(!b||!TW)return;const v=b.dataset.a.split(':'),a=v[1];
+if(v[0]=='t'){if(a!=tab){tab=a;draw()}return}if(v[0]=='x')return b.classList.toggle('x');if(busy)return toast(ERR.BUSY,1);
+if(v[0]=='rf')bg(1);else if(v[0]=='chk'){setChk(1);req('chk',0,o=>{if(o.err){setChk(0);toast(o.err,1)}})}else if(v[0]=='q')req(b.dataset.a,b,o=>toast(o.err||'Отправлено',!!o.err))};
+parse();if('hsi'.includes(S.a))tab=S.a;draw();
+if(TW){bg(2);start();TW.onEvent('activated',()=>{bg();start()});TW.onEvent('deactivated',()=>clearInterval(tmr));
+TW.onEvent('chatDataChanged',()=>{if(parse()){if(chk){setChk(0);toast('Проверено')}draw()}});TW.ready&&TW.ready()}
+</script>

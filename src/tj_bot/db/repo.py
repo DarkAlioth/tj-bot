@@ -3,7 +3,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
-from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, or_, select
+from sqlalchemy import (
+    ColumnElement,
+    CursorResult,
+    Delete,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +25,7 @@ from tj_bot.db.models import (
     SearchQuery,
     SearchQueryTorrent,
     Torrent,
+    WidgetMessage,
 )
 
 
@@ -26,6 +36,14 @@ class SearchStats:
     events_window: int
     users_window: int
     top_queries: list[tuple[str, int]]
+
+
+@dataclass(frozen=True)
+class HistoryEntry:
+    query_id: int
+    text: str
+    created_at: datetime.datetime
+    result_count: int
 
 
 @dataclass(frozen=True)
@@ -229,12 +247,17 @@ class TorrentRepo:
         self.session.add(SearchEvent(user_id=user_id, query_id=query_id))
         await self.session.flush()
 
-    async def get_user_history(
+    async def get_user_history_entries(
         self, user_id: int, limit: int = 10
-    ) -> list[tuple[int, str]]:
-        """Recent unique (query_id, query_text) pairs for the user, newest first."""
+    ) -> list[HistoryEntry]:
+        """Recent searches of the user, unique by text, newest first."""
         stmt = (
-            select(SearchQuery.id, SearchQuery.query_text, SearchEvent.created_at)
+            select(
+                SearchQuery.id,
+                SearchQuery.query_text,
+                SearchEvent.created_at,
+                SearchQuery.result_count,
+            )
             .join(SearchEvent, SearchEvent.query_id == SearchQuery.id)
             .where(SearchEvent.user_id == user_id, SearchQuery.query_text.is_not(None))
             .order_by(SearchEvent.created_at.desc())
@@ -242,21 +265,36 @@ class TorrentRepo:
         )
         rows = (await self.session.execute(stmt)).all()
         seen: set[str] = set()
-        history: list[tuple[int, str]] = []
-        for query_id, query_text, _ in rows:
+        history: list[HistoryEntry] = []
+        for query_id, query_text, created_at, result_count in rows:
             if query_text in seen:
                 continue
             seen.add(query_text)
-            history.append((query_id, query_text))
+            history.append(HistoryEntry(query_id, query_text, created_at, result_count))
             if len(history) >= limit:
                 break
         return history
+
+    async def get_user_history(
+        self, user_id: int, limit: int = 10
+    ) -> list[tuple[int, str]]:
+        """Recent unique (query_id, query_text) pairs for the user, newest first."""
+        entries = await self.get_user_history_entries(user_id, limit)
+        return [(entry.query_id, entry.text) for entry in entries]
+
+    async def clear_user_history(self, user_id: int) -> int:
+        """Forget the user's searches; returns the number of deleted events."""
+        return await self._delete_rows(
+            delete(SearchEvent).where(SearchEvent.user_id == user_id)
+        )
 
     async def get_query_text(self, query_id: int) -> str | None:
         stmt = select(SearchQuery.query_text).where(SearchQuery.id == query_id)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
-    async def get_stats(self, window: datetime.timedelta) -> SearchStats:
+    async def get_stats(
+        self, window: datetime.timedelta, top_limit: int = 5
+    ) -> SearchStats:
         cutoff = datetime.datetime.now(datetime.UTC) - window
         torrents = (
             await self.session.execute(select(func.count(Torrent.id)))
@@ -286,7 +324,7 @@ class TorrentRepo:
             )
             .group_by(SearchQuery.query_text)
             .order_by(func.count(SearchEvent.id).desc())
-            .limit(5)
+            .limit(top_limit)
         )
         top = [(row[0], row[1]) for row in (await self.session.execute(top_stmt)).all()]
         return SearchStats(
@@ -296,6 +334,21 @@ class TorrentRepo:
             users_window=users,
             top_queries=top,
         )
+
+    async def search_counts_by_day(self, days: int) -> list[int]:
+        """Searches per UTC calendar day for the last ``days`` days, oldest first."""
+        first = datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(
+            days=days - 1
+        )
+        start = datetime.datetime.combine(first, datetime.time.min, tzinfo=datetime.UTC)
+        day = func.date(func.timezone("UTC", SearchEvent.created_at))
+        stmt = (
+            select(day, func.count(SearchEvent.id))
+            .where(SearchEvent.created_at >= start)
+            .group_by(day)
+        )
+        counts = {row[0]: row[1] for row in (await self.session.execute(stmt)).all()}
+        return [counts.get(first + datetime.timedelta(days=i), 0) for i in range(days)]
 
     async def get_categories(self, query_hash: str) -> list[tuple[str, int]]:
         stmt = (
@@ -314,6 +367,26 @@ class TorrentRepo:
 
     async def get_torrent_by_hash(self, torrent_hash: str) -> Torrent | None:
         stmt = select(Torrent).where(Torrent.hash == torrent_hash)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def get_torrent_by_hash_prefix(
+        self, query_hash: str, prefix: str
+    ) -> Torrent | None:
+        """A result of the search whose hash starts with ``prefix``.
+
+        Widget requests carry only the first 8 hex characters of a hash; the
+        result set keeps the prefix unambiguous. An exact hash wins.
+        """
+        stmt = (
+            select(Torrent)
+            .select_from(Torrent, SearchQueryTorrent, SearchQuery)
+            .where(
+                *self._results_filter(query_hash, None),
+                Torrent.hash.startswith(prefix, autoescape=True),
+            )
+            .order_by((Torrent.hash == prefix).desc(), Torrent.hash)
+            .limit(1)
+        )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def add_favorite(self, user_id: int, torrent: Torrent) -> bool:
@@ -365,7 +438,28 @@ class TorrentRepo:
         favorite.seeders = item.seeders
         favorite.size = item.size
         favorite.published_at = item.published_at
+        favorite.updated_at = datetime.datetime.now(datetime.UTC)
         await self.session.flush()
+
+    @staticmethod
+    def _favorite_updated() -> ColumnElement[bool]:
+        """Changed on the tracker since the owner last acted on it."""
+        return Favorite.updated_at.is_not(None) & (
+            Favorite.seen_at.is_(None) | (Favorite.updated_at > Favorite.seen_at)
+        )
+
+    async def mark_favorites_seen(
+        self, user_id: int, favorite_id: int | None = None
+    ) -> None:
+        """Clear the "updated" flag of one favorite or of all the user's."""
+        stmt = (
+            update(Favorite)
+            .where(Favorite.user_id == user_id)
+            .values(seen_at=datetime.datetime.now(datetime.UTC))
+        )
+        if favorite_id is not None:
+            stmt = stmt.where(Favorite.id == favorite_id)
+        await self.session.execute(stmt)
 
     async def remove_favorite_by_hash(self, user_id: int, torrent_hash: str) -> None:
         await self.session.execute(
@@ -389,7 +483,7 @@ class TorrentRepo:
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def list_favorites(
-        self, user_id: int, limit: int, offset: int = 0
+        self, user_id: int, limit: int, offset: int = 0, updated_only: bool = False
     ) -> list[Favorite]:
         stmt = (
             select(Favorite)
@@ -398,10 +492,18 @@ class TorrentRepo:
             .limit(limit)
             .offset(offset)
         )
+        if updated_only:
+            stmt = stmt.where(self._favorite_updated())
         return list((await self.session.execute(stmt)).scalars())
 
     async def count_favorites(self, user_id: int) -> int:
         stmt = select(func.count(Favorite.id)).where(Favorite.user_id == user_id)
+        return (await self.session.execute(stmt)).scalar_one()
+
+    async def count_updated_favorites(self, user_id: int) -> int:
+        stmt = select(func.count(Favorite.id)).where(
+            Favorite.user_id == user_id, self._favorite_updated()
+        )
         return (await self.session.execute(stmt)).scalar_one()
 
     async def _delete_rows(self, statement: Delete) -> int:
@@ -430,7 +532,11 @@ class TorrentRepo:
         deleted_downloads = await self._delete_rows(
             delete(DownloadEvent).where(DownloadEvent.created_at < history_cutoff)
         )
-        return deleted_queries + deleted_torrents + deleted_downloads
+        # a widget untouched for the whole history window is dead in the chat
+        deleted_widgets = await self._delete_rows(
+            delete(WidgetMessage).where(WidgetMessage.updated_at < history_cutoff)
+        )
+        return deleted_queries + deleted_torrents + deleted_downloads + deleted_widgets
 
     async def touch_user(
         self, user_id: int, username: str | None, full_name: str | None
@@ -572,3 +678,80 @@ class TorrentRepo:
             )
         ).scalar_one()
         return searches, downloads
+
+    async def set_classic_ui(self, user_id: int, enabled: bool) -> None:
+        user = await self.get_user(user_id)
+        if user is not None:
+            user.classic_ui = enabled
+            await self.session.flush()
+
+    async def uses_classic_ui(self, user_id: int) -> bool:
+        stmt = select(BotUser.classic_ui).where(BotUser.user_id == user_id)
+        return bool((await self.session.execute(stmt)).scalar_one_or_none())
+
+    async def save_widget_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        kind: str,
+        context: dict[str, Any],
+        rev: int = 0,
+    ) -> None:
+        """Remember what a sent widget is about (its queries carry no state)."""
+        stmt = (
+            pg_insert(WidgetMessage)
+            .values(
+                chat_id=chat_id,
+                message_id=message_id,
+                kind=kind,
+                context=context,
+                rev=rev,
+            )
+            .on_conflict_do_update(
+                index_elements=[WidgetMessage.chat_id, WidgetMessage.message_id],
+                set_={"kind": kind, "context": context, "rev": rev},
+            )
+        )
+        await self.session.execute(stmt)
+
+    async def get_widget_message(
+        self, chat_id: int, message_id: int
+    ) -> WidgetMessage | None:
+        return await self.session.get(WidgetMessage, (chat_id, message_id))
+
+    async def update_widget_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        context: dict[str, Any] | None = None,
+        rev: int | None = None,
+    ) -> bool:
+        """Replace the context and/or revision; False when the message is unknown."""
+        row = await self.get_widget_message(chat_id, message_id)
+        if row is None:
+            return False
+        if context is not None:
+            row.context = context
+        if rev is not None:
+            row.rev = rev
+        await self.session.flush()
+        return True
+
+    async def delete_widget_message(self, chat_id: int, message_id: int) -> None:
+        await self.session.execute(
+            delete(WidgetMessage).where(
+                WidgetMessage.chat_id == chat_id, WidgetMessage.message_id == message_id
+            )
+        )
+
+    async def widget_messages_of_kind(
+        self, kind: str, limit: int = 200
+    ) -> list[WidgetMessage]:
+        """Most recently touched widgets of one kind (for enrichment pushes)."""
+        stmt = (
+            select(WidgetMessage)
+            .where(WidgetMessage.kind == kind)
+            .order_by(WidgetMessage.updated_at.desc())
+            .limit(limit)
+        )
+        return list((await self.session.execute(stmt)).scalars())

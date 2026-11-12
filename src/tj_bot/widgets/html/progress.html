@@ -1,0 +1,87 @@
+<style>
+body{margin:0;padding:12px 14px max(12px,env(safe-area-inset-bottom),var(--tg-content-safe-area-inset-bottom,0px));font-variant-numeric:tabular-nums}
+button{font:inherit;border:0;transition:transform .12s}
+button:active{transform:scale(.97)}
+.hr{display:flex;gap:12px;align-items:center}
+.rg{width:84px;height:84px;flex:none}
+.rg circle{fill:none;stroke-width:7;stroke:var(--tg-theme-section-separator-color)}
+.p{stroke:var(--tg-theme-button-color);stroke-linecap:round;stroke-dasharray:214;transition:stroke-dashoffset .4s,stroke .4s}
+.er .p{stroke:var(--tg-theme-destructive-text-color)}
+.dn .p{stroke:var(--tg-theme-accent-text-color)}
+.pc{font-size:1.2em;font-weight:650;fill:currentColor}
+.ok{fill:none;stroke:var(--tg-theme-accent-text-color);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.cel{animation:pop .6s}
+@keyframes pop{50%{transform:scale(1.08)}}
+.hx{min-width:0;flex:1}
+.st{font-size:.85em;font-weight:600;color:var(--tg-theme-accent-text-color)}
+.er .st{color:var(--tg-theme-destructive-text-color)}
+.t{font-size:1.05em;font-weight:650;line-height:1.25;max-height:2.5em;overflow:hidden;margin-top:2px}
+.bar{height:4px;border-radius:2px;background:var(--tg-theme-section-separator-color);margin-top:12px;overflow:hidden}
+.bar div{height:100%;border-radius:2px;background:var(--tg-theme-button-color);transition:width .4s}
+.gr{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.tl{position:relative;background:var(--tg-theme-secondary-bg-color);border-radius:12px;padding:8px 12px;min-width:0}
+.lb{font-size:.7em;text-transform:uppercase;color:var(--tg-theme-hint-color);font-weight:600}
+.vl{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+small{font-weight:400;color:var(--tg-theme-hint-color);font-size:.85em}
+.sk{position:absolute;right:10px;top:7px;width:48px;height:18px}
+.sk polyline{fill:none;stroke:var(--tg-theme-accent-text-color);stroke-width:1.5;stroke-linejoin:round}
+.ft{display:flex;gap:8px;margin-top:8px}
+.ft button{flex:1;white-space:nowrap;padding:0 8px}
+.g{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+.on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.dg{color:var(--tg-theme-destructive-text-color)}
+.q{flex:1;align-self:center;font-size:.9em;font-weight:600}
+.me{margin-top:10px;font-size:.8em;text-align:center;color:var(--tg-theme-hint-color)}
+.w{animation:bl .7s infinite alternate}
+@keyframes bl{to{color:transparent}}
+.to{font-size:.85em;margin-top:6px;text-align:center;color:var(--tg-theme-hint-color)}
+.to:empty{display:none}
+@media(prefers-reduced-motion:reduce){*{transition-duration:0s;animation-duration:0s}}
+</style>
+<div id=R></div>
+<script>
+const TW=window.TelegramWidget,$=i=>document.getElementById(i),R=$('R'),H=TW&&TW.HapticFeedback;
+const hap=(k,a)=>{try{H&&H[k](a)}catch{}};
+const RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи',INVALID_ANSWER:'Ошибка ответа'};
+const SV={downloading:'Загружается',stalledDL:'Ожидает сидов',metaDL:'Получение метаданных',forcedDL:'Принудительная загрузка',queuedDL:'В очереди на загрузку',checkingDL:'Проверка',checkingUP:'Проверка',stoppedDL:'На паузе',pausedDL:'На паузе',error:'Ошибка',missingFiles:'Файлы не найдены'};
+const DOTS='<span class=w>•••</span>';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+const fS=b=>{let v=b,i=0;while(v>=1024&&i<4){v/=1024;i++}return(i&&v<100?v.toFixed(1).replace('.',','):Math.round(v))+' '+['Б','КБ','МБ','ГБ','ТБ'][i]};
+const fE=s=>s<0||s>=864e4?'—':s<3600?Math.max(1,s/60|0)+' м':s<86400?(s/3600|0)+' ч '+(s%3600/60|0)+' м':(s/86400|0)+' д '+(s%86400/3600|0)+' ч';
+const p2=n=>(n<10?'0':'')+n;
+const fT=t=>{const d=new Date(t*1e3);return p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())};
+const fD=t=>{const d=new Date(t*1e3);return p2(d.getDate())+'.'+p2(d.getMonth()+1)+' '+fT(t).slice(0,5)};
+const isDone=s=>s.pr>=1,fP=v=>v.toFixed(1).replace('.',',')+'%';
+let S={st:'',n:'',pr:0,sz:0,dn:0,ds:0,us:0,eta:-1,t:0},seen=-1,hist=[],busy='',bgf=0,cf=0,to=0,tt=0,bad=0,cel=0,tm=0;
+function load(){try{const j=JSON.parse(TW.chatData);if(j&&(j.r|0)>=seen)apply(j)}catch{}}
+const bt=(a,l,c)=>'<button class="'+c+'" data-a="'+a+'"'+(busy?' disabled':'')+'>'+(busy==a?DOTS:l)+'</button>';
+const tile=(l,v,x)=>'<div class=tl><div class=lb>'+l+'</div><div class=vl>'+v+'</div>'+(x||'')+'</div>';
+const spark=()=>{if(hist.length<2)return'';const m=Math.max(...hist,1);return'<svg class=sk viewBox="0 0 48 18"><polyline points="'+hist.map((v,i)=>(i*47/(hist.length-1)|0)+','+(17-v/m*16|0)).join(' ')+'"/></svg>'};
+function draw(){const s=S,st=s.st,done=isDone(s),er=st=='error'||st=='missingFiles',gone=st=='gone',pa=st=='stoppedDL'||st=='pausedDL',up=st=='stoppedUP'||st=='pausedUP',p=done?100:s.pr*100;
+const lab=gone?'Удалено из qBittorrent':(done?'Готово':SV[st]||st)+(s.sz?' · '+fS(s.sz):'')+(done?' · '+(up?'остановлено':'раздаётся'):'');
+let h='<div class="hr '+(er?'er':done?'dn':pa?'pa':'')+'"><svg class="rg'+(cel?' cel':'')+'" viewBox="0 0 84 84"><circle cx=42 cy=42 r=34 /><circle class=p cx=42 cy=42 r=34 transform="rotate(-90 42 42)" style="stroke-dashoffset:'+(gone?214:214-2.14*p).toFixed(1)+'"/>'+(gone?'':done?'<path class=ok d="M30 43l8 8 16-17"/>':'<text class=pc id=pc x=42 y=42 dy=.36em text-anchor=middle>'+(s.sz?fP(p):'—')+'</text>')+'</svg><div class=hx><div class=st>'+lab+'</div><div class=t>'+esc(s.n)+'</div></div></div>';
+if(!gone)h+='<div class=bar><div style="width:'+p+'%"></div></div><div class=gr>'+tile('Скорость','↓ '+fS(s.ds)+'/с',spark())+tile('Отдача','↑ '+fS(s.us)+'/с')+tile('Осталось',done?'—':fE(s.eta))+tile('Загружено',fS(s.dn))+tile('Сиды · пиры',(s.se|0)+' · '+(s.pe|0))+tile('Рейтинг',(+s.ra||0).toFixed(2).replace('.',','))+tile('Файлы',s.ft?s.fc+' <small>из '+s.ft+'</small>':'—')+tile('Добавлен',s.ad?fD(s.ad):'—')+'</div>';
+if(cf)h+='<div class=ft><span class="q dg">Удалить?</span>'+bt('cf0','Отмена','g')+'</div><div class=ft>'+bt('del:0','Только из клиента','g dg')+bt('del:1','С файлами','g dg')+'</div>';
+else if(!gone)h+='<div class=ft>'+(er?bt('rc','Повторить проверку',''):done?bt(up?'re':'pa',up?'Раздавать':'Остановить',''):bt(pa?'re':'pa',pa?'Возобновить':'Пауза',''))+(er||done?'':bt('fo','Форсировать',s.fo?'on':'g'))+'</div><div class=ft>'+bt('cf1','Удалить','g dg')+bt('con','Консоль','g')+'</div>';
+const old=bad||Date.now()/1e3-s.t>20;
+h+='<div class="me'+(old?' dg':'')+'" data-a=rf>'+(busy=='rf'?DOTS:(old?'нет связи · ':'')+(s.t?'обновлено '+fT(s.t):'ожидаю данные')+' ↻')+'</div><div class="to '+(to?to[1]:'')+'">'+(to?to[0]:'')+'</div>';
+R.innerHTML=h;cel=0}
+function run(f,t){if(RM||isDone(S)||!S.sz)return;let k=0;const go=()=>{k+=.06;const a=$('pc');if(a&&k<1){a.textContent=fP((f+(t-f)*k)*100);requestAnimationFrame(go)}};go()}
+function apply(j){if(j.err){toast(j.err,'dg');return hap('notificationOccurred','error')}
+if(j.r!=null&&j.r<seen)return draw();seen=Math.max(seen,j.r|0);
+const f=S.pr,was=isDone(S);Object.assign(S,j);if(j.t==null)S.t=Date.now()/1e3|0;
+if(j.sp)hist=j.sp.slice(-12);else if(j.ds!=null)hist=hist.concat(S.ds).slice(-12);
+if(!was&&isDone(S)&&f>0){cel=1;hap('notificationOccurred','success')}bad=0;draw();run(f,S.pr)}
+function toast(t,c){to=[t,c];draw();clearTimeout(tt);tt=setTimeout(()=>{to=0;draw()},c?3e3:1600)}
+function tick(){if(busy||bgf||!TW)return;bgf=1;TW.request('bg').then(x=>{bgf=0;let j=null;try{j=JSON.parse(x.result)}catch{}if(j&&!j.err)apply(j);else{bad=1;draw()}},e=>{bgf=0;if(e.code=='NOT_ALLOWED')clearInterval(tm);else if(e.code!='RATE_LIMITED'){bad=1;draw()}})}
+function req(a){busy=a;draw();TW.request(a).then(x=>{busy='';let j=null;try{j=JSON.parse(x.result)}catch{}
+if(j)apply(j);else draw();if(!j||!j.err)hap('notificationOccurred','success')},
+e=>{busy='';toast(ERR[e.code]||'Ошибка связи','dg');hap('notificationOccurred','error')})}
+function sched(){clearInterval(tm);tm=setInterval(tick,5500)}
+document.body.onclick=e=>{const el=e.target.closest('[data-a]');if(!el||el.disabled||busy||!TW)return;const a=el.dataset.a;
+if(a=='cf1'||a=='cf0'){cf=+a[2];return draw()}
+hap('impactOccurred','light');cf=0;req(a)};
+if(TW){load();TW.onEvent('chatDataChanged',load);TW.onEvent('activated',()=>{tick();sched()});TW.onEvent('deactivated',()=>clearInterval(tm));tick();sched()}
+draw();TW&&TW.ready&&TW.ready();
+</script>

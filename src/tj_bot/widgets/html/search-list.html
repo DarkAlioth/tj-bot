@@ -1,0 +1,38 @@
+<style>*{box-sizing:border-box}body{margin:0;padding:10px 14px max(10px,env(safe-area-inset-bottom));font-variant-numeric:tabular-nums;line-height:1.3}button{font-weight:600;height:36px;padding:0 12px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;transition:transform .12s}button:active{transform:scale(.97)}.g,.ix{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}.c{height:30px;border-radius:99px;font-size:.8em}.p [data-a]{pointer-events:none}.ch{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px;border-radius:99px;font-size:.74em;font-weight:600;white-space:nowrap;background:var(--tg-theme-secondary-bg-color)}.ch,.m,.ix,.em,.dn{color:var(--tg-theme-hint-color)}.rw,#h{display:flex;align-items:center;gap:6px}#h{min-height:36px}.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.m{font-size:.82em}#f{min-height:1.3em;margin:1px 0 3px}.sw{touch-action:pan-y}.r{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--tg-theme-section-separator-color);cursor:pointer;line-height:1.25}.r:first-child{border-top:0}.ix{flex:none;min-width:22px;height:22px;padding:0 5px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;font-size:.72em;font-weight:650}.ix.w,.sq.w{font-size:0}.bd{flex:1;min-width:0}.t{display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95em}.t .el{flex:1}.nv{margin-top:6px}button.sq{width:36px;padding:0;flex:none}.e{color:var(--tg-theme-destructive-text-color)}.k{color:var(--tg-theme-accent-text-color)}.dots b{display:inline-block;width:5px;height:5px;margin-left:3px;border-radius:50%;background:currentColor;animation:dp 1s infinite}.ix .dots b{margin:0 1px}@keyframes dp{50%{transform:scale(.4)}}.em{text-align:center;padding:40px 0}.dn{padding:4px 0;font-size:.95em}@media(prefers-reduced-motion:reduce){.dots b{animation:none}}</style>
+<div id=h></div><div id=f class="m el"></div><div id=b></div>
+<script>
+const W=window.TelegramWidget,$=i=>document.getElementById(i),D=matchMedia('(prefers-reduced-motion:reduce)').matches?0:1,DOTS='<i class=dots><b></b><b></b><b></b></i>',
+E=s=>String(s??'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt()+';'),T=(c,h)=>`<div class="${c}">${h}</div>`,B=(c,a,h)=>`<button class="${c}" data-a="${a}">${h}</button>`,
+SK=['se','sz','za','dt','da'],ERR={N:'Откройте чат с ботом',B:'Подождите…',R:'Слишком часто',T:'Бот не ответил',F:'Ошибка связи',I:'Ошибка ответа'},
+hap=(k,v)=>{try{W.HapticFeedback[k](v)}catch(e){}},ctx=(s=S.s)=>`${S.qh}:${S.i0|0}:${s}:${S.f}:${S.c}`,pg=()=>(S.i0|0)/10|0,pgs=()=>Math.ceil((S.n|0)/10)||1;
+let S={},R=0,busy=0,tt=0,x0,dx,sw;
+function parse(){try{S=JSON.parse(W.chatData)||{}}catch(e){S={}}R=Math.max(R,S.r||0)}
+function toast(t,e){$('f').textContent=t;$('f').className='m el '+(e?'e':'k');clearTimeout(tt);tt=setTimeout(()=>{tt=0;sub()},e?2500:1600)}
+function sub(){$('f').className='m el';$('f').textContent=S.done?'':[S.q&&`«${S.q}»`,S.sl].filter(Boolean).join(' · ')}
+function err(m){hap('notificationOccurred','error');toast(m,1)}
+function rq(d,el,ok){if(!W||busy)return;busy=1;document.body.classList.add('p');el&&(el.classList.add('w'),el.insertAdjacentHTML('beforeend',DOTS));
+W.request(d).then(a=>{let j={};try{j=JSON.parse(a.result)||{}}catch(e){}j.err?err(j.err):ok(j)},e=>err(ERR[(e.code||'F')[0]]||ERR.F)).finally(()=>{busy=0;document.body.classList.remove('p');if(el){el.classList.remove('w');el.lastChild.remove()}})}
+function apply(j,d){if(j.v)S=j;else Object.assign(S,j);R=Math.max(R,j.r||0);hap('selectionChanged');if(!d||!D)return draw();$('b').animate([{transform:'none'},{transform:`translateX(${-24*d}px)`,offset:.5},{transform:`translateX(${24*d}px)`,offset:.5},{transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'});setTimeout(draw,110)}
+function go(d,el,dir){rq(d,el,j=>j.v?apply(j,dir):draw())}
+const nv=()=>T('rw nv',B('g c','s',E(S.sl||'Сиды ↓'))+B('g c','fs','Фильтры'+(S.fa?' <b class=k>•</b>':''))+B('g c','cd','Карточка'));
+function row(r,k){const i=(S.i0|0)+k,p=E(r[1]).split('|');p[2]&&(p[2]='⇡'+p[2]);
+return `<div class=r data-a=cd data-i=${i}><b class=ix>${i+1}</b><div class=bd><div class=t><span class=el>${E(r[0])}</span>${r[2]?`<span class=ch>★ ${E(r[2])}</span>`:''}</div><div class="m el">${p.join(' · ')}</div></div></div>`}
+function draw(){const n=S.n|0,i0=S.i0|0,rows=S.rows||[],p=pg();
+if(!S.v){$('h').innerHTML='';$('b').innerHTML=T('em','Нет данных');return}
+if(S.done){$('h').innerHTML='';$('b').innerHTML=T('dn','✓ '+E(S.done));return tt||sub()}
+$('h').innerHTML=`<div class=el style=flex:1><b>Результаты${rows.length?` ${i0+1}–${i0+rows.length}`:''}</b> <span class=m>${rows.length?'из ':''}${n}</span></div><button class="g sq" data-a=p${p?'':' disabled'}>‹</button><button class="g sq" data-a=n${p+1<pgs()?'':' disabled'}>›</button>`;
+$('b').innerHTML=(rows.length?T('sw',rows.map(row).join('')):T('em','Ничего не найдено'+(S.fa?' с этими фильтрами':'')))+nv();tt||sub()}
+function nav(k,el){const d=k=='n'?1:-1,p=pg()+d;if(p<0||p>=pgs())return;go('lp:'+ctx()+':'+p,el,d)}
+function act(a,el){const b=el.tagName=='BUTTON'?el:el.querySelector('.ix');
+if(a=='n'||a=='p')return nav(a,b);
+if(a=='s'){hap('impactOccurred','light');return go('ls:'+ctx(SK[(SK.indexOf(S.s)+1)%5]),b,1)}
+if(a=='fs')return rq('fs:'+ctx(),b,j=>j.v&&apply(j));
+if(a=='cd')return rq(`cd:${ctx()}:${el.dataset.i??S.i0|0}`,b,j=>j.v?apply(j):draw())}
+document.onclick=e=>{const t=e.target.closest('[data-a]');t&&act(t.dataset.a,t)};
+document.onpointerdown=e=>{sw=e.target.closest('.sw');dx=0;x0=e.clientX};
+document.onpointermove=e=>{if(sw){dx=e.clientX-x0;if(Math.abs(dx)>9){sw.setPointerCapture(e.pointerId);sw.style.transform=`translateX(${dx*((dx>0?!pg():pg()>=pgs()-1)?.12:.45)}px)`}}};
+document.onpointerup=e=>{if(sw){sw.style.transform='';sw=0;Math.abs(dx)>55&&nav(dx<0?'n':'p')}};
+document.onpointercancel=()=>{if(sw){sw.style.transform='';sw=0}};
+if(W){W.onEvent('chatDataChanged',()=>{const o=S,r=R;parse();S.r>r?draw():S=o});parse()}
+draw();W&&W.ready&&W.ready();
+</script>

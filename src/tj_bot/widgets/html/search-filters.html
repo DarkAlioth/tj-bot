@@ -1,0 +1,29 @@
+<style>*{box-sizing:border-box}body{margin:0;padding:10px 14px max(10px,env(safe-area-inset-bottom));font-variant-numeric:tabular-nums;line-height:1.3}button{font-weight:600;height:36px;padding:0 12px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;transition:transform .12s,background .15s,color .15s}button:active{transform:scale(.97)}.g,.sg{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}.c{height:30px;border-radius:99px;font-size:.8em;padding:0 10px;min-width:0}.c i{font-style:normal;font-weight:500;color:var(--tg-theme-hint-color)}.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.p [data-a]{pointer-events:none}.rw,#h{display:flex;align-items:center;gap:6px}.m,.hd,.dn{color:var(--tg-theme-hint-color)}.m{font-size:.82em;max-height:2.6em;overflow:hidden}.hd{font-size:.72em;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin:10px 0 5px}.cs{display:grid;grid-template-columns:1fr 1fr;gap:6px}@media(min-width:400px){.cs{grid-template-columns:1fr 1fr 1fr}}.sg{display:flex;gap:2px;padding:3px;border-radius:10px}.sg button{flex:1;min-width:0;height:28px;padding:0 3px;border-radius:8px;font-size:.78em;background:none;color:inherit}button.ac,.ac i{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}.a2{margin-top:12px}.a2 button{flex:1}.a2 .g{flex:none;padding:0 16px}#f{margin-top:6px;font-size:.78em;min-height:1.3em;color:var(--tg-theme-destructive-text-color)}.dots b{display:inline-block;width:5px;height:5px;margin-left:3px;border-radius:50%;background:currentColor;animation:dp 1s infinite}@keyframes dp{50%{transform:scale(.4)}}.dn{padding:4px 0;font-size:.95em}@media(prefers-reduced-motion:reduce){.dots b{animation:none}button{transition:none}}</style>
+<div id=b></div><div id=f></div>
+<script>
+const W=window.TelegramWidget,$=i=>document.getElementById(i),DOTS='<i class=dots><b></b><b></b><b></b></i>',
+E=s=>String(s??'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt()+';'),B=(c,a,h)=>`<button class="${c}" data-a="${a}">${h}</button>`,
+ERR={N:'Откройте чат с ботом',B:'Подождите…',R:'Слишком часто',T:'Бот не ответил',F:'Ошибка связи',I:'Ошибка ответа'},
+L=[['Сиды','любые','1+','10+','50+'],['Размер','любой','< 1 ГБ','1–5 ГБ','5–20 ГБ','> 20 ГБ'],['Дата','любая','неделя','месяц','год']],DS=['','за неделю','за месяц','за год'],
+hap=(k,v)=>{try{W.HapticFeedback[k](v)}catch(e){}},key=()=>`sf:${S.qh}:${S.f}:${S.c}`;
+let S={},R=0,busy=0,w,wc;
+function parse(){try{S=JSON.parse(W.chatData)||{}}catch(e){S={}}R=Math.max(R,S.r||0)}
+function load(){w=[...(/^\d{3}$/.test(S.f)?S.f:'000')].map(Number);wc=S.c||'ALL';try{const v=sessionStorage.getItem(key());if(v){w=[...v.slice(0,3)].map(Number);wc=v.slice(4)}}catch(e){}}
+function save(){try{sessionStorage.setItem(key(),w.join('')+':'+wc)}catch(e){}}
+function sum(){const c=(S.cats||[]).find(x=>x[0]==wc),p=[];wc!='ALL'&&c&&p.push(c[1]);w[0]&&p.push('сиды '+L[0][w[0]+1]);w[1]&&p.push(L[1][w[1]+1]);w[2]&&p.push(DS[w[2]]);return p.length?p.join(' · '):'не заданы'}
+function mark(){document.querySelectorAll('[data-a]').forEach(b=>{const[k,v]=b.dataset.a.split(':');b.classList.toggle('ac',k=='c'?v==wc:k<3&&w[k]==v)});$('s').textContent='Активно: '+sum()}
+function err(m){hap('notificationOccurred','error');$('f').textContent=m}
+function draw(){$('f').textContent='';
+if(!S.v)return $('b').innerHTML='<div class=dn>Нет данных</div>';
+if(S.done)return $('b').innerHTML='<div class=dn>✓ '+E(S.done)+'</div>';
+$('b').innerHTML=`<div id=h><b style=font-size:1.05em>Фильтры</b></div><div id=s class=m></div>`+(S.cats?`<div class=hd>Категория</div><div class=cs>${S.cats.map(c=>B('g c','c:'+c[0],'<span class=el>'+E(c[1])+'</span><i>'+(c[2]|0)+'</i>')).join('')}</div>`:'')+
+L.map((l,k)=>`<div class=hd>${l[0]}</div><div class=sg>${l.slice(1).map((t,i)=>B('',k+':'+i,t)).join('')}</div>`).join('')+`<div class="rw a2">${B('g','rs','Сбросить')}${B('','ap','Применить')}</div>`;mark()}
+function act(a,el){if(busy)return;if(a=='ap')return ap(el);$('f').textContent='';
+if(a=='rs'){w=[0,0,0];wc='ALL';hap('impactOccurred','light')}else{const[k,v]=a.split(':');k=='c'?wc=v:w[k]=+v;hap('selectionChanged')}save();mark()}
+function ap(el){if(!W)return;busy=1;document.body.classList.add('p');el.insertAdjacentHTML('beforeend',DOTS);const k=key();
+W.request(`f:${S.qh}:${S.i|0}:${S.s}:${S.f}:${S.c}:${w.join('')}:${wc}`).then(a=>{let j={};try{j=JSON.parse(a.result)||{}}catch(e){}if(j.err)return err(j.err);
+if(j.v)S=j;else Object.assign(S,j);R=Math.max(R,j.r||0);hap('notificationOccurred','success');try{sessionStorage.removeItem(k)}catch(e){}load();draw()},e=>err(ERR[(e.code||'F')[0]]||ERR.F)).finally(()=>{busy=0;document.body.classList.remove('p');el.lastChild.remove()})}
+document.onclick=e=>{const t=e.target.closest('[data-a]');t&&act(t.dataset.a,t)};
+if(W){W.onEvent('chatDataChanged',()=>{const o=S,r=R;parse();S.r>r?(load(),draw()):S=o});parse()}
+load();draw();W&&W.ready&&W.ready();
+</script>

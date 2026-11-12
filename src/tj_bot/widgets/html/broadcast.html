@@ -1,0 +1,63 @@
+<style>
+body{margin:0;padding:12px 14px max(12px,var(--tg-content-safe-area-inset-bottom,0px))}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;height:40px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color);transition:transform .12s}
+button:active{transform:scale(.97)}
+.g{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+.cd .g{background:var(--tg-theme-bg-color)}
+.d{color:var(--tg-theme-destructive-text-color)}
+.ac{color:var(--tg-theme-accent-text-color)}
+.w{width:100%;margin-top:8px}
+.hr{display:flex;align-items:center;gap:8px}
+.q{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hi{font-size:1.05em;font-weight:650}
+.ch{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:.8em;font-weight:600;line-height:1.6;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-subtitle-text-color)}
+.on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.mt{font-size:.85em;color:var(--tg-theme-hint-color)}
+.cd{background:var(--tg-theme-secondary-bg-color);border-radius:12px;padding:10px 12px;margin-top:12px}
+.tx{white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text;max-height:13.5em;overflow:hidden;line-height:1.35}
+.n{font-variant-numeric:tabular-nums}
+.big{font-size:1.6em;font-weight:650;line-height:1.2;margin-top:12px}
+.bar{height:6px;border-radius:3px;background:var(--tg-theme-secondary-bg-color);margin:10px 0 8px;overflow:hidden}
+.bar div{height:100%;border-radius:3px;background:var(--tg-theme-button-color);transition:width .4s}
+.ok .bar div{background:var(--tg-theme-accent-text-color)}
+#t{min-height:18px;margin-top:8px;font-size:.85em;text-align:center}
+.ds{display:inline-flex;gap:3px;align-items:center;height:1em;vertical-align:middle}
+.ds b{width:5px;height:5px;border-radius:50%;background:currentColor;animation:p 1s infinite}
+.ds b+b{animation-delay:.2s}.ds b+b+b{animation-delay:.4s}
+@keyframes p{0%,80%,100%{transform:scale(.5)}40%{transform:scale(1)}}
+.bz{pointer-events:none}
+@media (prefers-reduced-motion:reduce){.ds b{animation:none}button,.bar div{transition:none}}
+</style>
+<div id="c"></div><div id="t" class="ac"></div>
+<script>
+const TW=window.TelegramWidget,$=i=>document.getElementById(i);
+const ERR={NOT_ALLOWED:'Откройте чат с ботом',BUSY:'Подождите…',RATE_LIMITED:'Слишком часто',TIMEOUT:'Бот не ответил',FAILED:'Ошибка связи',INVALID_ANSWER:'Ошибка ответа'};
+const LB={draft:'Черновик',run:'Отправляется',done:'Готово',cancel:'Отменена'};
+let S={},R=-1,busy=0,cf=0,cl=0,tm=0,tmr=0,view='';
+try{cl=+localStorage.getItem('c')}catch(e){}
+const pj=s=>{try{return JSON.parse(s)}catch(e){}};
+const esc=s=>(s==null?'':s+'').replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';');
+const hap=(k,v)=>{try{TW.HapticFeedback[k](v)}catch(e){}};
+const pf=n=>n%10==1&&n%100!=11?0:n%10>1&&n%10<5&&(n%100<10||n%100>19)?1:2;
+const us=n=>n+' '+['пользователь','пользователя','пользователей'][pf(n)];
+function toast(s,e){const t=$('t');t.textContent=s;t.className=e?'d':'ac';clearTimeout(tm);tm=setTimeout(()=>t.textContent='',e?3e3:1600)}
+const fail=s=>{hap('notificationOccurred','error');toast(s,1)};
+const bt=(c,a,t)=>'<button class="'+c+'" data-a="'+a+'">'+t+'</button>';
+const head=()=>'<div class="hr"><b class="hi q">Рассылка</b><span class="ch'+(S.st=='done'?' on':'')+'">'+LB[S.st]+'</span></div>';
+const line=()=>'<div class="cd mt q">'+esc(S.tx)+'</div>';
+function rep(){const n=S.n|0,ok=S.ok|0,f=S.fail|0;return'<div class="big n">'+(S.st=='done'?'Доставлено ':'')+'<span id="k">'+ok+'</span> из '+n+'</div><div class="bar"><div id="f" style="width:'+(n?ok/n*100:0)+'%"></div></div><div class="mt n" id="fl">'+(f?'<span class="d">'+f+' заблокировали бота</span>':ok==n&&n?'Все получили':S.st=='run'?'Отправляю…':'')+'</div>'}
+function vDraft(){const n=S.n|0,f=pf(n);return head()+'<div class="cd tx">'+esc(S.tx)+'</div><div class="mt n" id="mo"></div><div class="mt n" style="margin-top:10px">'+(f?'Получат ':'Получит ')+n+(f?' активных ':' активный ')+['пользователь','пользователя','пользователей'][f]+' · ≈ '+Math.max(1,Math.round(n/15))+' с (≈ 2 с на 30 человек)</div>'+(cf?'<div class="cd"><b>Отправить '+n+(f?' пользователям?':' пользователю?')+'</b><div class="hr" style="margin-top:8px">'+bt('q','go','Да, отправить')+bt('g q','no','Нет')+'</div></div>':bt('w','cf','Отправить'))+bt('g w','x','Отмена')}
+function vRun(){return head()+line()+rep()+'<div class="mt n">Обновляется каждые 5 с</div>'}
+function vDone(){return cl?'<div class="hr" data-a="op"><span class="ch on">Готово</span><span class="q n">Доставлено '+(S.ok|0)+' из '+(S.n|0)+' · '+esc(S.tx)+'</span></div>':head()+line()+rep()+bt('g w','cl','Закрыть')}
+function vCancel(){return head()+'<div class="big">Рассылка отменена</div>'+line()}
+function draw(){const st=S.st||'draft',c=$('c');if(st=='run'&&view=='run'){const n=S.n|0,b=S.ok|0,k=$('k'),a=+k.textContent;cnt(k,a,b);$('f').style.width=(n?b/n*100:0)+'%';$('fl').innerHTML=(S.fail|0)?'<span class="d">'+S.fail+' заблокировали бота</span>':'Отправляю…';return}view=st;c.className=st=='done'?'ok':'';c.innerHTML=st=='run'?vRun():st=='done'?vDone():st=='cancel'?vCancel():vDraft();const x=c.querySelector('.tx');if(x&&(S.more||x.scrollHeight>x.clientHeight+2))$('mo').textContent='Показано начало'+(S.more?' — ещё '+S.more+' симв.':'')+', получатели увидят текст целиком'}
+function cnt(el,a,b){if(matchMedia('(prefers-reduced-motion:reduce)').matches||a==b)return el.textContent=b;let i=0,n=Math.min(20,Math.abs(b-a));const st=()=>{i++;el.textContent=Math.round(a+(b-a)*i/n);if(i<n)requestAnimationFrame(st)};st()}
+function apply(j){if(!j)return;if(j.r!=null){if(j.r<R)return;R=j.r}const was=S.st;Object.assign(S,j);draw();if(S.st=='done'&&was!='done')hap('notificationOccurred',(S.fail|0)?'warning':'success');sched()}
+function tick(){if(!TW||S.st!='run'||busy)return sched();busy=1;TW.request('bg').then(a=>{busy=0;apply(pj(a.result))},e=>{busy=0;sched()})}
+function sched(ms){clearTimeout(tmr);if(S.st=='run'&&TW&&TW.isActive!==false)tmr=setTimeout(tick,ms||5e3)}
+function req(v,el){if(!TW||busy)return;busy=1;document.body.classList.add('bz');const h=el.innerHTML;el.innerHTML='<i class="ds"><b></b><b></b><b></b></i>';TW.request(v).then(a=>{busy=0;document.body.classList.remove('bz');const j=pj(a.result)||{};if(j.err){if(el.isConnected)el.innerHTML=h;return fail(j.err)}cf=0;apply(j);if(S.st=='run')sched(1500);if(S.st=='cancel')hap('impactOccurred','light')},e=>{busy=0;document.body.classList.remove('bz');if(el.isConnected)el.innerHTML=h;fail(ERR[e.code]||ERR.FAILED)})}
+document.body.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el||busy)return;const a=el.dataset.a;if(a=='cf'||a=='no'){cf=a=='cf';draw();return hap('impactOccurred','light')}if(a=='cl'||a=='op'){cl=a=='cl'?1:0;try{localStorage.setItem('c',cl)}catch(r){}draw();return hap('impactOccurred','light')}req(a,el)});
+function load(){const j=TW&&pj(TW.chatData);if(j&&(j.r|0)>R){S={};apply(j)}}
+if(TW){TW.onEvent('chatDataChanged',load);TW.onEvent('activated',()=>tick());TW.onEvent('deactivated',()=>clearTimeout(tmr))}
+load();if(R<0)draw();if(S.st=='run')tick();try{TW.ready()}catch(e){}
+</script>

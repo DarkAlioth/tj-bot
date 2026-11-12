@@ -493,3 +493,26 @@ async def test_classic_ui_flag(session: AsyncSession) -> None:
     assert await repo.uses_classic_ui(5) is True
     await repo.set_classic_ui(404, True)
     assert await repo.uses_classic_ui(404) is False
+
+
+async def test_get_torrent_by_hash_prefix_is_scoped_and_prefers_exact(
+    session: AsyncSession,
+) -> None:
+    repo = TorrentRepo(session)
+    ids = await repo.upsert_torrents(
+        [
+            make_torrent("abcdef0123456789aa"),
+            make_torrent("abcdef01"),
+            make_torrent("abcdef0199"),
+        ]
+    )
+    await repo.create_search("q1", ids[:2], "one")
+    await repo.create_search("q2", ids[2:], "two")
+
+    exact = await repo.get_torrent_by_hash_prefix("q1", "abcdef01")
+    assert exact is not None and exact.hash == "abcdef01"
+    scoped = await repo.get_torrent_by_hash_prefix("q2", "abcdef01")
+    assert scoped is not None and scoped.hash == "abcdef0199"
+    assert await repo.get_torrent_by_hash_prefix("q1", "zzz") is None
+    # LIKE wildcards in the prefix are literal
+    assert await repo.get_torrent_by_hash_prefix("q1", "abcdef_1") is None

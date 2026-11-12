@@ -1,4 +1,3 @@
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -49,13 +48,13 @@ def test_answer_json_and_error_build_the_method() -> None:
     assert answer_error(QUERY, "Нет").data == '{"err":"Нет"}'
 
 
-def fake_bot(result: Any) -> AsyncMock:
+def fake_bot(result: object) -> AsyncMock:
     bot = AsyncMock()
     bot.return_value = result
     return bot
 
 
-def sent_method(bot: AsyncMock) -> Any:
+def sent_method(bot: AsyncMock) -> object:
     assert bot.await_args is not None
     return bot.await_args.args[0]
 

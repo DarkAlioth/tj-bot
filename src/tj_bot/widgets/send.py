@@ -57,7 +57,7 @@ async def send_widget(
     chat_id: int,
     name: str,
     state: dict[str, Any],
-    caption: str,
+    caption: str | None = None,
     *,
     repo: TorrentRepo,
     kind: str,
@@ -66,9 +66,8 @@ async def send_widget(
 ) -> Message:
     """Send ``html/<name>.html`` with ``state`` as chat_data and record its context.
 
-    ``caption`` is HTML (the bot's default parse mode): escape tracker data.
-    It is shown above the widget and is what clients without widget support
-    display instead of it.
+    ``caption`` (HTML, escape tracker data) is shown below the widget and is
+    what clients without widget support display instead of it.
     """
     message = await bot(
         SendWidget(
@@ -76,7 +75,7 @@ async def send_widget(
             html=load_widget(name),
             chat_data=dumps_state(state),
             caption=caption,
-            show_caption_above_media=True,
+            show_caption_above_media=False,
             allow_queries=True,
             reply_markup=reply_markup,
         )

@@ -90,7 +90,7 @@ def test_format_duration_picks_the_two_largest_units() -> None:
     assert format_duration(-5) == "0м"
 
 
-def test_health_doc_has_qbit_summary_and_optional_scraper_tile() -> None:
+def test_health_doc_has_qbit_summary() -> None:
     doc = health_doc(health(QBIT))
 
     assert doc == {
@@ -101,8 +101,6 @@ def test_health_doc_has_qbit_summary_and_optional_scraper_tile() -> None:
         "m": NOW,
     }
     assert health_doc(health(None))["q"] is None
-    with_scraper = Health(1, (1, 2), 3, None, 4, scraper=(1240, 12, 3))
-    assert health_doc(with_scraper)["sc"] == {"p": 1240, "q": 12, "e": 3}
 
 
 def test_health_doc_clamps_unknown_free_space() -> None:

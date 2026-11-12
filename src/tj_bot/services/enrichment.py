@@ -29,12 +29,6 @@ class CardMeta:
     translation: tuple[str, ...] = ()
     subtitles: tuple[str, ...] = ()
     plot: str | None = None
-    # 4×6 ambient mosaic, 72 hex chars (12-bit rgb per cell, row-major)
-    mosaic: str | None = None
-    # Telegram file_id once the poster was sent at least once
-    poster_file_id: str | None = None
-    # prepared JPEG for the first sendPhoto; dropped once a file_id is known
-    poster_bytes: bytes | None = None
     # True while the tracker page is still being fetched in the background
     pending: bool = False
 
@@ -55,9 +49,6 @@ class Enricher(Protocol):
     def prefetch(self, torrents: Sequence[Torrent]) -> None:
         """Schedule background fetches (the next cards of a result set)."""
 
-    async def remember_poster(self, torrent_hash: str, file_id: str) -> None:
-        """Store the file_id after the first successful sendPhoto."""
-
     def on_ready(self, callback: ReadyCallback) -> None:
         """Register the callback fired with ``(torrent_hash, meta)`` after a fetch."""
 
@@ -69,9 +60,6 @@ class NullEnricher:
         return CardMeta()
 
     def prefetch(self, torrents: Sequence[Torrent]) -> None:
-        return None
-
-    async def remember_poster(self, torrent_hash: str, file_id: str) -> None:
         return None
 
     def on_ready(self, callback: ReadyCallback) -> None:

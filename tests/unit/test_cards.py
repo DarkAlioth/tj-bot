@@ -8,7 +8,6 @@ from tj_bot.services.cards import (
     DROP_ORDER,
     THIN_SPACE,
     SearchContext,
-    caption,
     category_view,
     cut,
     done_state,
@@ -77,7 +76,6 @@ FULL_META = CardMeta(
         "заговорщикам, уничтожившим его семью. Стоя перед выбором между любовью "
         "всей жизни и судьбой вселенной, он должен предотвратить ужасное будущее."
     ),
-    mosaic="ca6db7eb" * 9,
 )
 CTX = SearchContext(qh=QH, index=11, total=302, from_cache=False, is_admin=False)
 
@@ -100,7 +98,7 @@ def test_search_state_full_meta_follows_the_protocol() -> None:
     assert state["tr"] == "Дюна: Часть вторая" and state["te"] == "Dune: Part Two"
     assert state["y"] == 2024
     assert state["q"] == ["2160p", "HDR10", "BDRemux"]
-    assert state["cn"] == "Фильмы 4K" and state["hu"] == 262
+    assert state["cn"] == "Фильмы 4K"
     assert state["tk"] == "RuTracker"
     assert (state["sd"], state["pr"]) == (1543, 120)
     assert state["sz"] == "45 ГБ" and state["dt"] == "01.03.2024"
@@ -114,7 +112,6 @@ def test_search_state_full_meta_follows_the_protocol() -> None:
     assert state["u"] == "https://rutracker.org/forum/viewtopic.php?t=6512345"
     assert state["fav"] == 1
     assert "en" not in state
-    assert state["m"] == "ca6db7eb" * 9
     assert state_size(state) <= MAX_STATE_BYTES
     dumps_state(state)
 
@@ -140,11 +137,11 @@ def test_search_state_fallbacks_without_meta() -> None:
     assert "tr" not in state and "te" not in state
     assert state["y"] == 2025
     assert "q" not in state
-    assert state["cn"] == "Игры" and state["hu"] == 36
+    assert state["cn"] == "Игры"
     assert state["tk"] == "Byrutor"
     assert (state["fa"], state["fc"], state["adm"]) == (1, 1, 1)
     assert "dr" not in state and "up" not in state and "u" not in state
-    assert not {"ml", "pp", "aa", "pl", "pm", "fav", "en", "m"} & state.keys()
+    assert not {"ml", "pp", "aa", "pl", "pm", "fav", "en"} & state.keys()
 
 
 def test_search_state_title_split_and_pending() -> None:
@@ -161,17 +158,9 @@ def test_search_state_title_split_and_pending() -> None:
 
     assert state["tr"] == "Дюна: Пророчество" and state["te"] == "Dune: Prophecy"
     assert state["q"] == ["1080p", "WEB-DL", "S1E1-6", "MVO"]
-    assert state["cn"] == "Сериалы HD" and state["hu"] == 178
+    assert state["cn"] == "Сериалы HD"
     assert state["tk"] == "NoNaMe"
     assert state["en"] == 1
-
-
-def test_search_state_other_category_has_no_hue() -> None:
-    torrent = make_torrent(title="Some Thing", category="XXX/Other Stuff Long")
-
-    state = search_state(torrent, CTX, CardMeta(), rev=1, is_fav=False, today=TODAY)
-
-    assert state["cn"] == "XXX/Other…" and "hu" not in state
 
 
 def test_search_state_meta_titles_override_the_split() -> None:
@@ -216,27 +205,6 @@ def test_pack_leaves_a_fitting_state_untouched() -> None:
     state = {"v": 1, "r": 1, "pl": "x", "m": "y"}
 
     assert pack(dict(state)) == state
-
-
-def test_caption_from_the_card_state() -> None:
-    state = search_state(make_torrent(), CTX, FULL_META, rev=7, is_fav=False)
-
-    assert caption(state) == (
-        f"Дюна: Часть вторая · 45 ГБ · 1{THIN_SPACE}543 сида · RuTracker · 12 / 302"
-    )
-
-
-def test_caption_escapes_html_and_uses_raw_title() -> None:
-    state = {
-        "ti": "<Tom & Jerry>",
-        "sz": "1 ГБ",
-        "sd": 1,
-        "tk": "RuTor",
-        "i": 0,
-        "n": 1,
-    }
-
-    assert caption(state) == "&lt;Tom &amp; Jerry&gt; · 1 ГБ · 1 сид · RuTor · 1 / 1"
 
 
 def test_more_answer_caps_plot_and_people() -> None:
@@ -325,31 +293,6 @@ def list_torrents(count: int, title: str = TITLE) -> list[Torrent]:
         make_torrent(id=i, hash=f"{i:08x}" + "0" * 24, title=title, seeders=1543 - i)
         for i in range(count)
     ]
-
-
-def test_list_state_rows_meta_and_caption() -> None:
-    ctx = SearchContext(qh=QH, index=10, total=302, filter_code="100")
-
-    state = list_state(list_torrents(10), ctx, rev=8, query_text="дюна" * 10)
-
-    assert (state["v"], state["r"], state["qh"]) == (1, 8, "a1b2c3d4")
-    assert state["q"] == "дюнадюнадюнадюнадюнадюн…"
-    assert (state["i0"], state["n"], state["s"], state["sl"]) == (
-        10, 302, "se", "Сиды ↓",
-    )  # fmt: skip
-    assert state["f"] == "100" and state["fa"] == 1
-    assert len(state["rows"]) == 10
-    assert state["rows"][0] == [
-        "Дюна: Часть вторая",
-        f"45 ГБ|01.03.24|1{THIN_SPACE}543|RuTracker",
-    ]
-    assert state_size(state) <= MAX_STATE_BYTES
-    assert list_caption(state, "дюна") == (
-        "Результаты 11–20 из 302 по запросу «дюна» · Сиды ↓"
-    )
-    assert list_caption({"i0": 0, "rows": [], "n": 0, "sl": "Сиды ↓"}, None) == (
-        "Результаты 1–0 из 0 · Сиды ↓"
-    )
 
 
 def pathological_list(seeders: str) -> dict[str, Any]:
@@ -443,4 +386,29 @@ def test_filters_texts() -> None:
     )
     assert filters_caption(None, ResultFilters(seeders=3), "TV") == (
         "Фильтры поиска «» · Активно: сиды 50+ · Сериалы"
+    )
+
+
+def test_list_state_rows_meta_and_caption() -> None:
+    ctx = SearchContext(qh=QH, index=10, total=302, filter_code="100")
+
+    state = list_state(list_torrents(10), ctx, rev=8, query_text="дюна" * 10)
+
+    assert (state["v"], state["r"], state["qh"]) == (1, 8, "a1b2c3d4")
+    assert state["q"] == "дюнадюнадюнадюнадюнадюн…"
+    assert (state["i0"], state["n"], state["s"], state["sl"]) == (
+        10, 302, "se", "Сиды ↓",
+    )  # fmt: skip
+    assert state["f"] == "100" and state["fa"] == 1
+    assert len(state["rows"]) == 10
+    assert state["rows"][0] == [
+        "Дюна: Часть вторая",
+        f"45 ГБ|01.03.24|1{THIN_SPACE}543|RuTracker",
+    ]
+    assert state_size(state) <= MAX_STATE_BYTES
+    assert list_caption(state, "дюна") == (
+        "Результаты 11–20 из 302 по запросу «дюна» · Сиды ↓"
+    )
+    assert list_caption({"i0": 0, "rows": [], "n": 0, "sl": "Сиды ↓"}, None) == (
+        "Результаты 1–0 из 0 · Сиды ↓"
     )

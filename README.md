@@ -106,7 +106,7 @@ All settings come from `.env` (never committed):
 | `ALERT_CHECK_INTERVAL_SECONDS`| no       | `1800`             | Monitor pass interval; `0` disables alerts     |
 | `ALERT_FREE_SPACE_GB`         | no       | `10`               | Low-disk threshold for qBittorrent alerts      |
 | `DOWNLOAD_MAX_BYTES`          | no       | `10485760`         | Max `.torrent` size the bot will fetch         |
-| `ENRICH_ENABLED`              | no       | `true`             | Scrape tracker pages for card posters/metadata |
+| `ENRICH_ENABLED`              | no       | `true`             | Scrape tracker pages for card metadata |
 | `SCRAPE_PROXY_URL`            | no       | —                  | http(s) proxy for tracker pages and images     |
 | `FLARESOLVERR_URL`            | no       | `http://flaresolverr:8191` | Solver used on Cloudflare challenges (RuTracker) |
 | `TAPOCHEK_USERNAME` / `_PASSWORD` | no   | —                  | Tapochek login for its members-only video topics |

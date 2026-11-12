@@ -55,7 +55,6 @@ async def store(
     torrent_hash: str,
     status: str,
     error: str | None = None,
-    poster_bytes: bytes | None = b"\xff\xd8\xff",
 ) -> TorrentMetaRow:
     async with pool() as session:
         row = await MetaRepo(session).upsert(
@@ -64,8 +63,6 @@ async def store(
             details_url="https://rutor.info/torrent/1/x",
             status=status,
             meta={"title_ru": "Дюна", "genres": ["драма"]},
-            poster_bytes=poster_bytes,
-            mosaic="abc" * 24,
             error=error,
         )
         await session.commit()
@@ -87,29 +84,19 @@ async def age(
         await session.commit()
 
 
-async def test_upsert_get_and_poster_file_id(
-    pool: async_sessionmaker[AsyncSession],
-) -> None:
+async def test_upsert_and_get(pool: async_sessionmaker[AsyncSession]) -> None:
     row = await store(pool, "m1", "ok")
-    assert row.fetched_at is not None and row.poster_file_id is None
+    assert row.fetched_at is not None
     async with pool() as session:
         repo = MetaRepo(session)
         loaded = await repo.get("m1")
         assert loaded is not None
         assert loaded.meta == {"title_ru": "Дюна", "genres": ["драма"]}
-        assert loaded.poster_bytes == b"\xff\xd8\xff" and loaded.mosaic == "abc" * 24
         assert not is_expired(loaded)
-        await repo.set_poster_file_id("m1", "FILE")
-        await session.commit()
-    async with pool() as session:
-        loaded = await MetaRepo(session).get("m1")
-        assert loaded is not None
-        assert loaded.poster_file_id == "FILE" and loaded.poster_bytes is None
-        assert await MetaRepo(session).get("absent") is None
-    # a re-scrape replaces everything, including the file_id
-    row = await store(pool, "m1", "error", error="HTTP 503", poster_bytes=None)
-    assert row.status == "error" and row.poster_file_id is None
-    assert row.error == "HTTP 503" and row.poster_bytes is None
+        assert await repo.get("absent") is None
+    # a re-scrape replaces the row
+    row = await store(pool, "m1", "error", error="HTTP 503")
+    assert row.status == "error" and row.error == "HTTP 503"
 
 
 async def test_purge_expired_follows_the_status_ttls(

@@ -1,7 +1,7 @@
 import datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, and_, delete, func, or_, update
+from sqlalchemy import CursorResult, and_, delete, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,20 +41,15 @@ class MetaRepo:
         details_url: str,
         status: str,
         meta: dict[str, Any],
-        poster_bytes: bytes | None = None,
-        mosaic: str | None = None,
         error: str | None = None,
     ) -> TorrentMetaRow:
-        """Replace the row for ``torrent_hash``; a re-scrape drops the old file_id."""
+        """Replace the row for ``torrent_hash``."""
         values = {
             "hash": torrent_hash,
             "tracker": tracker,
             "details_url": details_url,
             "status": status,
             "fetched_at": func.now(),
-            "poster_file_id": None,
-            "poster_bytes": poster_bytes,
-            "mosaic": mosaic,
             "meta": meta,
             "error": error,
         }
@@ -68,14 +63,6 @@ class MetaRepo:
             .returning(TorrentMetaRow)
         )
         return (await self.session.execute(stmt)).scalar_one()
-
-    async def set_poster_file_id(self, torrent_hash: str, file_id: str) -> None:
-        """Keep Telegram's file_id and drop the bytes it replaces."""
-        await self.session.execute(
-            update(TorrentMetaRow)
-            .where(TorrentMetaRow.hash == torrent_hash)
-            .values(poster_file_id=file_id, poster_bytes=None)
-        )
 
     async def purge_expired(self) -> int:
         """Delete rows older than their status TTL; returns the row count."""

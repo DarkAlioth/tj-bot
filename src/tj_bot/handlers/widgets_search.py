@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aiogram import Bot, F
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandObject
 from aiogram.filters.command import Command
 from aiogram.types import (
@@ -23,7 +23,6 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    InputMediaPhoto,
     Message,
 )
 from sqlalchemy.exc import SQLAlchemyError
@@ -54,7 +53,6 @@ from tj_bot.handlers.user import (
 )
 from tj_bot.services.cards import (
     SearchContext,
-    caption,
     cut,
     done_state,
     filters_caption,
@@ -77,7 +75,6 @@ from tj_bot.services.qbittorrent import QbittorrentClient
 from tj_bot.widgets.api import WidgetQuery
 from tj_bot.widgets.dispatch import Verb, WidgetRouter
 from tj_bot.widgets.send import (
-    NOT_MODIFIED,
     answer_error,
     answer_json,
     edit_widget_state,
@@ -93,8 +90,10 @@ KIND_LIST = "search-list"
 KIND_FILTERS = "search-filters"
 # enrichment budgets: the first card may wait for the tracker page, a page
 # turn must stay snappy (the widget's request times out at 15 s)
-SEARCH_BUDGET = 6.0
-NAV_BUDGET = 3.0
+SEARCH_BUDGET = 4.0
+NAV_BUDGET = 0.0
+# «ещё» is a deliberate tap: a short wait for the page is fine
+MORE_BUDGET = 3.0
 PREFETCH_CARDS = 3
 NOT_FOUND_FILTERED_TEXT = "Ничего не найдено с этими фильтрами"
 NO_RIGHTS_TEXT = "Недостаточно прав"
@@ -199,7 +198,6 @@ def card_context(
     ctx: SearchContext,
     torrent: Torrent,
     meta: CardMeta,
-    photo_mid: int | None,
     previous: dict[str, Any] | None,
 ) -> dict[str, Any]:
     context: dict[str, Any] = {
@@ -214,8 +212,6 @@ def card_context(
         "adm": int(ctx.is_admin),
         "en": int(meta.pending),
     }
-    if photo_mid is not None:
-        context["photo_mid"] = photo_mid
     if previous and previous.get("list") is not None:
         context["list"] = previous["list"]
     return context
@@ -230,76 +226,6 @@ def refresh_keyboard(qh: str) -> InlineKeyboardMarkup:
     )
 
 
-def poster_input(meta: CardMeta) -> str | BufferedInputFile | None:
-    if meta.poster_file_id:
-        return meta.poster_file_id
-    if meta.poster_bytes:
-        return BufferedInputFile(meta.poster_bytes, filename="poster.jpg")
-    return None
-
-
-async def remember_file_id(
-    enricher: Enricher, torrent_hash: str, message: Message | bool
-) -> None:
-    if isinstance(message, Message) and message.photo:
-        await enricher.remember_poster(torrent_hash, message.photo[-1].file_id)
-
-
-async def send_poster(
-    bot: Bot, enricher: Enricher, chat_id: int, torrent_hash: str, meta: CardMeta
-) -> int | None:
-    """Send the poster as its own photo above the card; its message id."""
-    photo = poster_input(meta)
-    if photo is None:
-        return None
-    try:
-        sent = await bot.send_photo(chat_id, photo)
-    except TelegramAPIError:
-        logger.warning("Poster of %s not sent", torrent_hash, exc_info=True)
-        return None
-    await remember_file_id(enricher, torrent_hash, sent)
-    return sent.message_id
-
-
-async def sync_poster(
-    bot: Bot,
-    enricher: Enricher,
-    chat_id: int,
-    photo_mid: int | None,
-    torrent_hash: str,
-    meta: CardMeta,
-) -> int | None:
-    """Bring a card's poster message in line with ``meta``; the kept message id.
-
-    The photo is edited to the new poster, left alone while enrichment is
-    still pending, and deleted once the card is known to have none. A card
-    without a photo message never gets one: sent now, it would land below.
-    """
-    if photo_mid is None:
-        return None
-    photo = poster_input(meta)
-    if photo is not None:
-        try:
-            edited = await bot.edit_message_media(
-                InputMediaPhoto(media=photo), chat_id=chat_id, message_id=photo_mid
-            )
-        except TelegramBadRequest as error:
-            if NOT_MODIFIED not in str(error):
-                logger.warning("Poster %s/%s not edited: %s", chat_id, photo_mid, error)
-        except TelegramAPIError:
-            logger.warning("Poster %s/%s not edited", chat_id, photo_mid, exc_info=True)
-        else:
-            await remember_file_id(enricher, torrent_hash, edited)
-        return photo_mid
-    if meta.pending:
-        return photo_mid
-    try:
-        await bot.delete_message(chat_id, photo_mid)
-    except TelegramAPIError:
-        logger.debug("Poster %s/%s already gone", chat_id, photo_mid)
-    return None
-
-
 async def send_card(
     bot: Bot,
     repo: TorrentRepo,
@@ -310,7 +236,6 @@ async def send_card(
     ctx: SearchContext,
 ) -> None:
     meta = await enricher.card_meta(torrent, budget=SEARCH_BUDGET)
-    photo_mid = await send_poster(bot, enricher, chat_id, torrent.hash, meta)
     is_fav = await repo.is_favorite(user_id, torrent.hash)
     state = search_state(torrent, ctx, meta, rev=1, is_fav=is_fav)
     await send_widget(
@@ -318,10 +243,9 @@ async def send_card(
         chat_id,
         KIND_CARD,
         state,
-        caption(state),
         repo=repo,
         kind=KIND_CARD,
-        context=card_context(ctx, torrent, meta, photo_mid, None),
+        context=card_context(ctx, torrent, meta, None),
         reply_markup=refresh_keyboard(ctx.qh),
     )
 
@@ -343,16 +267,13 @@ async def update_card(
     state = search_state(torrent, ctx, meta, rev=row.rev + 1, is_fav=is_fav)
     if query is not None:
         await answer_json(query, state)
-    photo_mid = await sync_poster(
-        bot, enricher, row.chat_id, row.context.get("photo_mid"), torrent.hash, meta
-    )
     await edit_widget_state(
         bot,
         row.chat_id,
         row.message_id,
         state,
         repo=repo,
-        context=card_context(ctx, torrent, meta, photo_mid, row.context),
+        context=card_context(ctx, torrent, meta, row.context),
     )
 
 
@@ -689,6 +610,17 @@ async def list_page(
     await edit_widget_state(bot, row.chat_id, row.message_id, state, repo=repo)
 
 
+async def close_widget(bot: Bot, repo: TorrentRepo, row: WidgetMessage) -> bool:
+    """Delete a list or sheet message once it served its purpose."""
+    try:
+        await bot.delete_message(row.chat_id, row.message_id)
+    except TelegramAPIError:
+        logger.info("Widget %s/%s not deleted", row.chat_id, row.message_id)
+        return False
+    await repo.delete_widget_message(row.chat_id, row.message_id)
+    return True
+
+
 async def finish_widget(
     bot: Bot, repo: TorrentRepo, row: WidgetMessage, state: dict[str, Any]
 ) -> None:
@@ -718,14 +650,14 @@ async def show_card(
     *,
     user_id: int,
 ) -> None:
-    """Turn the card recorded in ``row.context["card"]`` to ``index`` of ``results``."""
-    card = await repo.get_widget_message(row.chat_id, int(row.context["card"]))
+    """Send a fresh card for ``index`` of ``results`` below the list or sheet."""
     torrent = await repo.get_result_page(
         results.search.hash, results.category, index, ctx.sort, results.filters
     )
-    if card is None or torrent is None:
-        logger.info("Card of widget %s/%s is gone", row.chat_id, row.message_id)
+    if torrent is None:
+        logger.info("Result %s of %s is gone", index, results.search.hash[:8])
         return
+    card = await repo.get_widget_message(row.chat_id, int(row.context["card"]))
     search_ctx = SearchContext(
         qh=results.search.hash,
         index=index,
@@ -733,15 +665,13 @@ async def show_card(
         sort=ctx.sort,
         filter_code=results.filters.to_code(),
         category=results.token,
-        from_cache=bool(card.context.get("fc")),
+        from_cache=bool(card.context.get("fc")) if card is not None else False,
         is_admin=config.qbit_enabled and config.is_admin(user_id),
     )
     try:
-        await update_card(
-            bot, repo, enricher, card, torrent, search_ctx, user_id=user_id, query=None
-        )
+        await send_card(bot, repo, enricher, row.chat_id, user_id, torrent, search_ctx)
     except TelegramAPIError:
-        logger.warning("Card %s/%s not updated", card.chat_id, card.message_id)
+        logger.warning("Card for %s/%s not sent", row.chat_id, row.message_id)
 
 
 @widgets_search_router.widget_query(Verb("cd"))
@@ -764,14 +694,7 @@ async def open_card(
         await answer_error(query, STALE_QUERY_TEXT)
         return
     index = int(args[5])
-    done = done_state(
-        results.search.hash,
-        row.rev + 1,
-        f"Открыта карточка {index + 1}",
-        q=cut(results.search.query_text or "", 24),
-        sl=SORT_LABELS[ctx.sort],
-    )
-    await answer_json(query, done)
+    await answer_json(query, {"ok": 1})
     await show_card(
         bot,
         repo,
@@ -783,7 +706,28 @@ async def open_card(
         index,
         user_id=query.from_user.id,
     )
-    await finish_widget(bot, repo, row, done)
+    if not await close_widget(bot, repo, row):
+        done = done_state(
+            results.search.hash,
+            row.rev + 1,
+            f"Открыта карточка {index + 1}",
+            q=cut(results.search.query_text or "", 24),
+            sl=SORT_LABELS[ctx.sort],
+        )
+        await finish_widget(bot, repo, row, done)
+
+
+@widgets_search_router.widget_query(Verb("x"))
+async def close_sheet(
+    query: WidgetQuery, args: list[str], repo: TorrentRepo, bot: Bot
+) -> None:
+    """«Закрыть» on the list or the sheet: the message disappears."""
+    row = await queried_widget(query, repo)
+    if row is None or row.kind not in (KIND_LIST, KIND_FILTERS):
+        await answer_error(query, STALE_QUERY_TEXT)
+        return
+    await answer_json(query, {"ok": 1})
+    await close_widget(bot, repo, row)
 
 
 @widgets_search_router.widget_query(Verb("f"))
@@ -809,9 +753,7 @@ async def apply_filters(
     if results.total == 0:
         await answer_error(query, NOT_FOUND_FILTERED_TEXT)
         return
-    text = filters_done_text(results.filters, results.category, results.total)
-    done = done_state(results.search.hash, row.rev + 1, text)
-    await answer_json(query, done)
+    await answer_json(query, {"ok": 1})
     await show_card(
         bot,
         repo,
@@ -826,16 +768,13 @@ async def apply_filters(
     list_mid = row.context.get("list")
     if list_mid is not None:
         list_row = await repo.get_widget_message(row.chat_id, int(list_mid))
-        if list_row is not None and not list_row.context.get("done"):
-            list_done = done_state(
-                results.search.hash,
-                list_row.rev + 1,
-                text,
-                q=cut(results.search.query_text or "", 24),
-                sl=SORT_LABELS[applied.sort],
-            )
-            await finish_widget(bot, repo, list_row, list_done)
-    await finish_widget(bot, repo, row, done)
+        if list_row is not None:
+            await close_widget(bot, repo, list_row)
+    if not await close_widget(bot, repo, row):
+        text = filters_done_text(results.filters, results.category, results.total)
+        await finish_widget(
+            bot, repo, row, done_state(results.search.hash, row.rev + 1, text)
+        )
 
 
 async def card_torrent(
@@ -953,7 +892,7 @@ async def more_details(
         await answer_error(query, STALE_QUERY_TEXT)
         return
     _, torrent = found
-    meta = await enricher.card_meta(torrent, budget=NAV_BUDGET)
+    meta = await enricher.card_meta(torrent, budget=MORE_BUDGET)
     await answer_json(query, more_answer(meta))
 
 
@@ -973,21 +912,13 @@ async def apply_enrichment(
         is_fav = await repo.is_favorite(row.chat_id, torrent_hash)
         state = search_state(torrent, ctx, meta, rev=row.rev + 1, is_fav=is_fav)
         try:
-            photo_mid = await sync_poster(
-                bot,
-                enricher,
-                row.chat_id,
-                row.context.get("photo_mid"),
-                torrent_hash,
-                meta,
-            )
             await edit_widget_state(
                 bot,
                 row.chat_id,
                 row.message_id,
                 state,
                 repo=repo,
-                context=card_context(ctx, torrent, meta, photo_mid, row.context),
+                context=card_context(ctx, torrent, meta, row.context),
             )
         except TelegramAPIError:
             logger.warning(

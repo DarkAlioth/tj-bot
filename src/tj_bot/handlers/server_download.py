@@ -270,8 +270,16 @@ async def _safe_edit(
         logger.debug("File picker edit skipped")
 
 
+async def _report(query: CallbackQuery | None, message: Message, text: str) -> None:
+    """Error feedback: an alert for a callback, a chat message for a widget."""
+    if query is None:
+        await message.answer(padded(text))
+    else:
+        await alert_or_message(query, text)
+
+
 async def begin_torrent_send(
-    query: CallbackQuery,
+    query: CallbackQuery | None,
     message: Message,
     repo: TorrentRepo,
     jackett: JackettClient,
@@ -280,17 +288,21 @@ async def begin_torrent_send(
     name: str,
     download_url: str,
 ) -> None:
-    """Fetch the .torrent, add it stopped and open the file picker."""
+    """Fetch the .torrent, add it stopped and open the file picker.
+
+    ``query`` is None for a widget request, which is answered before the
+    slow part starts; feedback then goes to the chat.
+    """
     # release the per-update transaction before slow tracker/qbit calls
     await repo.commit()
     try:
         content = await jackett.download(download_url)
     except DownloadTooLargeError:
-        await alert_or_message(query, "Файл слишком большой")
+        await _report(query, message, "Файл слишком большой")
         return
     except JackettError:
         logger.exception("Failed to fetch %r for the server download", name)
-        await alert_or_message(query, "Не удалось получить файл с трекера")
+        await _report(query, message, "Не удалось получить файл с трекера")
         return
     tag = new_tag()
     torrent_hash: str | None = None
@@ -308,7 +320,8 @@ async def begin_torrent_send(
             await qbit.add_tags(torrent_hash, tag)
         except QbittorrentError:
             logger.debug("Tagging the existing torrent failed", exc_info=True)
-        await ack_silent(query, "Уже в qBittorrent — открываю файлы")
+        if query is not None:
+            await ack_silent(query, "Уже в qBittorrent — открываю файлы")
     else:
         try:
             await qbit.add_torrent_file(
@@ -320,13 +333,14 @@ async def begin_torrent_send(
             )
         except QbittorrentError:
             logger.exception("Failed to add %r to qBittorrent", name)
-            await alert_or_message(query, QBIT_DOWN_TEXT)
+            await _report(query, message, QBIT_DOWN_TEXT)
             return
         torrent_hash = await _wait_for_metadata(qbit, tag, ADD_VISIBLE_TIMEOUT_SECONDS)
         if torrent_hash is None:
-            await alert_or_message(query, "qBittorrent не принял торрент")
+            await _report(query, message, "qBittorrent не принял торрент")
             return
-        await ack_silent(query)
+        if query is not None:
+            await ack_silent(query)
     status = await message.answer(padded("Загружаю список файлов…"))
     await render_selection(status, qbit, torrent_hash, page=0)
 

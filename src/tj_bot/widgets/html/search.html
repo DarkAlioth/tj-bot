@@ -1,0 +1,16 @@
+<!-- placeholder: the real search card arrives later; redraws from chat_data -->
+<style>
+  .card { padding: 12px; font: 14px/1.4 sans-serif; color: var(--tg-theme-text-color); }
+  .hint { color: var(--tg-theme-hint-color); }
+</style>
+<div class="card"><div id="title">Поиск</div><div id="hint" class="hint"></div></div>
+<script>
+  const W = TelegramWidget;
+  const render = () => {
+    const state = W.chatData ? JSON.parse(W.chatData) : {};
+    document.getElementById('hint').textContent = state.q || 'нет данных';
+  };
+  W.onEvent('chatDataChanged', render);
+  render();
+  W.ready();
+</script>

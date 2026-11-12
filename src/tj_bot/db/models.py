@@ -113,6 +113,12 @@ class Favorite(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # set by the favorites watcher when the tracker topic changed
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # set when the owner acts on the favorite; "обновлено" while updated_at > seen_at
+    seen_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DownloadEvent(Base):

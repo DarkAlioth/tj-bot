@@ -94,3 +94,22 @@ def torrent_progress_text(torrent: dict[str, Any], name: str) -> str:
             f" · сиды {torrent.get('num_seeds', 0)}",
         ]
     )
+
+
+def format_size_ru(num_bytes: float) -> str:
+    """Compact Russian size for widget rows: «312 МБ», «58,4 ГБ»."""
+    value = float(num_bytes)
+    for unit in ("Б", "КБ", "МБ"):
+        if value < 1024:
+            return f"{int(value)} {unit}"
+        value /= 1024
+    unit = "ГБ"
+    if value >= 1024:
+        value /= 1024
+        unit = "ТБ"
+    return f"{value:.1f} {unit}".replace(".", ",")
+
+
+def group_thousands(number: int) -> str:
+    """«1 240» — a space every three digits, as the widget mocks show it."""
+    return f"{number:,}".replace(",", " ")

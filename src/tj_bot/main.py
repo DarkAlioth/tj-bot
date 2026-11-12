@@ -27,6 +27,7 @@ from tj_bot.db.maintenance import cleanup_loop
 from tj_bot.db.migrate import run_migrations
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers import routers_list
+from tj_bot.handlers.widgets_links import make_send_admin_widget
 from tj_bot.handlers.widgets_search import register_enrichment_push
 from tj_bot.middlewares.access import AccessMiddleware
 from tj_bot.middlewares.config import ConfigMiddleware
@@ -150,6 +151,9 @@ async def main(settings: Settings) -> None:
     dp["enricher"] = enricher or NullEnricher()
     register_enrichment_push(bot, session_pool, dp["enricher"])
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
+    dp["send_admin_widget"] = make_send_admin_widget(
+        config, qbit, monitor, dp["started_at"]
+    )
     dp["monitor"] = monitor
     # background tasks spawned by widget handlers open their own sessions
     dp["session_pool"] = session_pool

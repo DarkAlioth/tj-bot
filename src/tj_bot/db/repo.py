@@ -3,7 +3,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
-from sqlalchemy import ColumnElement, CursorResult, Delete, delete, func, or_, select
+from sqlalchemy import (
+    ColumnElement,
+    CursorResult,
+    Delete,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +36,14 @@ class SearchStats:
     events_window: int
     users_window: int
     top_queries: list[tuple[str, int]]
+
+
+@dataclass(frozen=True)
+class HistoryEntry:
+    query_id: int
+    text: str
+    created_at: datetime.datetime
+    result_count: int
 
 
 @dataclass(frozen=True)
@@ -230,12 +247,17 @@ class TorrentRepo:
         self.session.add(SearchEvent(user_id=user_id, query_id=query_id))
         await self.session.flush()
 
-    async def get_user_history(
+    async def get_user_history_entries(
         self, user_id: int, limit: int = 10
-    ) -> list[tuple[int, str]]:
-        """Recent unique (query_id, query_text) pairs for the user, newest first."""
+    ) -> list[HistoryEntry]:
+        """Recent searches of the user, unique by text, newest first."""
         stmt = (
-            select(SearchQuery.id, SearchQuery.query_text, SearchEvent.created_at)
+            select(
+                SearchQuery.id,
+                SearchQuery.query_text,
+                SearchEvent.created_at,
+                SearchQuery.result_count,
+            )
             .join(SearchEvent, SearchEvent.query_id == SearchQuery.id)
             .where(SearchEvent.user_id == user_id, SearchQuery.query_text.is_not(None))
             .order_by(SearchEvent.created_at.desc())
@@ -243,15 +265,28 @@ class TorrentRepo:
         )
         rows = (await self.session.execute(stmt)).all()
         seen: set[str] = set()
-        history: list[tuple[int, str]] = []
-        for query_id, query_text, _ in rows:
+        history: list[HistoryEntry] = []
+        for query_id, query_text, created_at, result_count in rows:
             if query_text in seen:
                 continue
             seen.add(query_text)
-            history.append((query_id, query_text))
+            history.append(HistoryEntry(query_id, query_text, created_at, result_count))
             if len(history) >= limit:
                 break
         return history
+
+    async def get_user_history(
+        self, user_id: int, limit: int = 10
+    ) -> list[tuple[int, str]]:
+        """Recent unique (query_id, query_text) pairs for the user, newest first."""
+        entries = await self.get_user_history_entries(user_id, limit)
+        return [(entry.query_id, entry.text) for entry in entries]
+
+    async def clear_user_history(self, user_id: int) -> int:
+        """Forget the user's searches; returns the number of deleted events."""
+        return await self._delete_rows(
+            delete(SearchEvent).where(SearchEvent.user_id == user_id)
+        )
 
     async def get_query_text(self, query_id: int) -> str | None:
         stmt = select(SearchQuery.query_text).where(SearchQuery.id == query_id)
@@ -403,7 +438,28 @@ class TorrentRepo:
         favorite.seeders = item.seeders
         favorite.size = item.size
         favorite.published_at = item.published_at
+        favorite.updated_at = datetime.datetime.now(datetime.UTC)
         await self.session.flush()
+
+    @staticmethod
+    def _favorite_updated() -> ColumnElement[bool]:
+        """Changed on the tracker since the owner last acted on it."""
+        return Favorite.updated_at.is_not(None) & (
+            Favorite.seen_at.is_(None) | (Favorite.updated_at > Favorite.seen_at)
+        )
+
+    async def mark_favorites_seen(
+        self, user_id: int, favorite_id: int | None = None
+    ) -> None:
+        """Clear the "updated" flag of one favorite or of all the user's."""
+        stmt = (
+            update(Favorite)
+            .where(Favorite.user_id == user_id)
+            .values(seen_at=datetime.datetime.now(datetime.UTC))
+        )
+        if favorite_id is not None:
+            stmt = stmt.where(Favorite.id == favorite_id)
+        await self.session.execute(stmt)
 
     async def remove_favorite_by_hash(self, user_id: int, torrent_hash: str) -> None:
         await self.session.execute(
@@ -427,7 +483,7 @@ class TorrentRepo:
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def list_favorites(
-        self, user_id: int, limit: int, offset: int = 0
+        self, user_id: int, limit: int, offset: int = 0, updated_only: bool = False
     ) -> list[Favorite]:
         stmt = (
             select(Favorite)
@@ -436,10 +492,18 @@ class TorrentRepo:
             .limit(limit)
             .offset(offset)
         )
+        if updated_only:
+            stmt = stmt.where(self._favorite_updated())
         return list((await self.session.execute(stmt)).scalars())
 
     async def count_favorites(self, user_id: int) -> int:
         stmt = select(func.count(Favorite.id)).where(Favorite.user_id == user_id)
+        return (await self.session.execute(stmt)).scalar_one()
+
+    async def count_updated_favorites(self, user_id: int) -> int:
+        stmt = select(func.count(Favorite.id)).where(
+            Favorite.user_id == user_id, self._favorite_updated()
+        )
         return (await self.session.execute(stmt)).scalar_one()
 
     async def _delete_rows(self, statement: Delete) -> int:

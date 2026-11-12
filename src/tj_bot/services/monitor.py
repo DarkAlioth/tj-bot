@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import time
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ from aiogram import Bot
 from tj_bot.config import AppConfig
 from tj_bot.services import broadcaster
 from tj_bot.services.formatting import format_size, padded
+from tj_bot.services.hub_views import HubStatus
 from tj_bot.services.jackett import JackettClient, JackettError
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
 
@@ -75,6 +77,8 @@ class MonitorState:
     problems: dict[str, Problem] = field(default_factory=dict)
     indexers: list[IndexerStatus] = field(default_factory=list)
     checked_at: int = 0
+    # None until qBittorrent was probed at least once
+    qbit_ok: bool | None = None
     probe: asyncio.Task[dict[str, Problem]] | None = field(default=None, repr=False)
 
     @property
@@ -85,6 +89,16 @@ class MonitorState:
     @property
     def probe_running(self) -> bool:
         return self.probe is not None
+
+    def hub_status(self) -> HubStatus | None:
+        """The hub's status line; None before the baseline pass."""
+        if not self.checked_at:
+            return None
+        return HubStatus(
+            jackett_ok="jackett" not in self.problems,
+            qbit_ok=self.qbit_ok is not False,
+            at=datetime.datetime.fromtimestamp(self.checked_at, datetime.UTC),
+        )
 
 
 async def collect_problems(
@@ -115,7 +129,11 @@ async def collect_problems(
         except QbittorrentError:
             # the qbit host may be legitimately powered off — /health covers it
             logger.debug("Skipping free-space check: qBittorrent unreachable")
+            if state is not None:
+                state.qbit_ok = False
         else:
+            if state is not None:
+                state.qbit_ok = True
             if 0 <= free < free_space_threshold_bytes:
                 problems["space"] = space_problem(free)
     return problems

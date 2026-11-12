@@ -9,6 +9,7 @@ from tj_bot.handlers.server_download import server_download_router
 from tj_bot.handlers.user import user_router
 from tj_bot.handlers.users import users_router
 from tj_bot.handlers.widgets_admin import widgets_admin_router
+from tj_bot.handlers.widgets_hub import hub_router
 from tj_bot.handlers.widgets_search import widgets_search_router
 from tj_bot.handlers.widgets_server import widgets_server_router
 
@@ -23,6 +24,7 @@ routers_list = [
     users_router,
     admin_router,
     server_download_router,
+    hub_router,  # widget /start, /history, /favorites; classic users fall through
     favorites_router,
     widgets_search_router,
     user_router,

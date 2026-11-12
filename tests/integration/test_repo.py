@@ -551,3 +551,83 @@ async def test_search_counts_by_day_and_top_limit(session: AsyncSession) -> None
     stats = await repo.get_stats(datetime.timedelta(days=7), top_limit=1)
     assert stats.top_queries == [("one", 3)]
     assert len((await repo.get_stats(datetime.timedelta(days=7))).top_queries) == 2
+
+
+async def test_favorites_updated_and_seen_flags(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    await repo.upsert_torrents([make_torrent("u1"), make_torrent("u2")])
+    for torrent_hash in ("u1", "u2"):
+        torrent = await repo.get_torrent_by_hash(torrent_hash)
+        assert torrent is not None
+        await repo.add_favorite(111, torrent)
+    await session.commit()
+    first, second = await repo.list_favorites(111, limit=10)
+    assert first.updated_at is None and first.seen_at is None
+    assert await repo.count_updated_favorites(111) == 0
+    assert await repo.list_favorites(111, limit=10, updated_only=True) == []
+
+    # the watcher refreshed one snapshot: it is "updated" until seen
+    await repo.update_favorite_snapshot(
+        first.id, make_torrent(first.torrent_hash, seeders=99)
+    )
+    assert first.updated_at is not None
+    assert await repo.count_updated_favorites(111) == 1
+    assert [f.id for f in await repo.list_favorites(111, 10, updated_only=True)] == [
+        first.id
+    ]
+    assert await repo.count_updated_favorites(222) == 0  # scoped per user
+
+    await repo.mark_favorites_seen(111, first.id)
+    await session.refresh(first)
+    assert first.seen_at is not None and first.seen_at >= first.updated_at
+    assert await repo.count_updated_favorites(111) == 0
+
+    # a later refresh flags it again; marking all clears every row
+    for favorite in (first, second):
+        await repo.update_favorite_snapshot(
+            favorite.id, make_torrent(favorite.torrent_hash, seeders=100)
+        )
+    assert await repo.count_updated_favorites(111) == 2
+    await repo.mark_favorites_seen(111)
+    assert await repo.count_updated_favorites(111) == 0
+
+
+async def test_favorites_columns_from_migration(session: AsyncSession) -> None:
+    rows = (
+        await session.execute(
+            text(
+                "SELECT column_name, data_type, is_nullable FROM information_schema"
+                ".columns WHERE table_name = 'favorites'"
+                " AND column_name IN ('updated_at', 'seen_at') ORDER BY column_name"
+            )
+        )
+    ).all()
+    assert [tuple(row) for row in rows] == [
+        ("seen_at", "timestamp with time zone", "YES"),
+        ("updated_at", "timestamp with time zone", "YES"),
+    ]
+
+
+async def test_history_entries_and_clear(session: AsyncSession) -> None:
+    repo = TorrentRepo(session)
+    ids = await repo.upsert_torrents([make_torrent("h1")])
+    first_id = await repo.create_search("qh1", ids, query_text="dune")
+    second_id = await repo.create_search("qh2", [], query_text="silo")
+    await repo.record_search_event(111, first_id)
+    await repo.record_search_event(111, second_id)
+    await repo.record_search_event(111, first_id)  # a repeat: unique by text
+    await repo.record_search_event(222, first_id)
+    await session.commit()
+
+    entries = await repo.get_user_history_entries(111)
+    assert [(e.query_id, e.text, e.result_count) for e in entries] == [
+        (first_id, "dune", 1),
+        (second_id, "silo", 0),
+    ]
+    assert entries[0].created_at.tzinfo is not None
+    assert await repo.get_user_history_entries(111, limit=1) == entries[:1]
+
+    assert await repo.clear_user_history(111) == 3
+    assert await repo.get_user_history_entries(111) == []
+    assert await repo.get_user_history(222) == [(first_id, "dune")]  # untouched
+    assert await repo.clear_user_history(111) == 0

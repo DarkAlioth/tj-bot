@@ -396,7 +396,14 @@ async def test_dashboard_query_validates_the_index_and_runs_the_search(
 ) -> None:
     spawned = capture_spawn(monkeypatch)
     widget = make_widget("dashboard", {"a": "s", "top": ["дюна", "шерлок"], "i": []})
-    common = (widget, AsyncMock(), AsyncMock(), make_config(), FakePool().typed)
+    common = (
+        widget,
+        AsyncMock(),
+        AsyncMock(),
+        make_config(),
+        AsyncMock(),
+        FakePool().typed,
+    )
 
     assert answer_of(await wa.dashboard_query(make_query("q:x"), ["x"], *common)) == {
         "err": wa.ERR_BAD_REQUEST
@@ -410,7 +417,7 @@ async def test_dashboard_query_validates_the_index_and_runs_the_search(
     assert len(spawned) == 1
 
     run = AsyncMock()
-    monkeypatch.setattr(wa, "run_search", run)
+    monkeypatch.setattr(wa, "run_widget_search", run)
     repo = make_repo()
     monkeypatch.setattr(wa, "TorrentRepo", lambda session: repo)
     await spawned[0]

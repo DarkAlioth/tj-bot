@@ -28,7 +28,8 @@ from tj_bot.config import AppConfig
 from tj_bot.db.models import WidgetMessage
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
-from tj_bot.handlers.user import SEARCHING_TEXT, run_search
+from tj_bot.handlers.user import SEARCHING_TEXT
+from tj_bot.handlers.widgets_search import run_widget_search
 from tj_bot.services import broadcaster
 from tj_bot.services.admin_views import (
     ACTIVITY_ROWS,
@@ -52,6 +53,7 @@ from tj_bot.services.admin_views import (
     users_state,
     with_toast,
 )
+from tj_bot.services.enrichment import Enricher
 from tj_bot.services.formatting import DOWNLOADING_STATES, padded
 from tj_bot.services.jackett import JackettClient
 from tj_bot.services.monitor import MonitorState, probe_now
@@ -362,12 +364,15 @@ async def run_top_query(
     text: str,
     jackett: JackettClient,
     config: AppConfig,
+    enricher: Enricher,
     session_pool: SessionPool,
 ) -> None:
-    """The classic text search flow for a tapped top query (new message)."""
+    """Run a tapped top query as a widget search in a new message."""
     status = await bot.send_message(chat_id, SEARCHING_TEXT)
     async with session_pool() as session:
-        await run_search(status, user_id, text, TorrentRepo(session), jackett, config)
+        await run_widget_search(
+            status, user_id, text, TorrentRepo(session), jackett, config, enricher, bot
+        )
         await session.commit()
 
 
@@ -379,6 +384,7 @@ async def dashboard_query(
     bot: Bot,
     jackett: JackettClient,
     config: AppConfig,
+    enricher: Enricher,
     session_pool: SessionPool,
 ) -> AnswerWidgetQuery:
     index = parse_int(args[0]) if len(args) == 1 else None
@@ -390,7 +396,14 @@ async def dashboard_query(
     chat_id, _ = message_key(query)
     spawn(
         run_top_query(
-            bot, chat_id, query.from_user.id, top[index], jackett, config, session_pool
+            bot,
+            chat_id,
+            query.from_user.id,
+            top[index],
+            jackett,
+            config,
+            enricher,
+            session_pool,
         )
     )
     return answer_json(query, {"ok": 1})

@@ -17,18 +17,13 @@ from tj_bot.services.admin_views import (
     QbitSummary,
     UserRow,
     activity_answer,
-    broadcast_caption,
-    broadcast_done_caption,
     broadcast_state,
-    dashboard_caption,
     dashboard_state,
     dashboard_tick,
     format_duration,
     health_doc,
     indexer_rows,
-    recipients_dative,
     user_row,
-    users_caption,
     users_state,
     with_toast,
 )
@@ -223,21 +218,6 @@ def test_dashboard_tick_carries_rows_only_when_given() -> None:
     assert size(answer) <= 1024
 
 
-def test_dashboard_caption_summarizes_both_tabs() -> None:
-    caption = dashboard_caption(
-        health(QBIT), stats([]), indexers(), {"indexer:rutor": indexer_problem("RuTor")}
-    )
-
-    assert "аптайм 3д 14ч" in caption
-    assert "qBittorrent 2/14 (1.2 MB/s↓ 228.5 KB/s↑)" in caption
-    assert "индексеры 6/7" in caption
-    assert caption.endswith("📊 7 дней: 169 поисков, 5 пользователей")
-    assert "qBittorrent недоступен" in dashboard_caption(health(), stats([]), [], {})
-
-
-# --- users -----------------------------------------------------------------
-
-
 def make_user(
     uid: int = 100,
     username: str | None = "alice",
@@ -355,16 +335,6 @@ def test_activity_answer_caps_rows_and_maps_kinds() -> None:
     assert size(answer) <= 1024
 
 
-def test_users_caption_lists_counts_and_page() -> None:
-    assert users_caption([23, 19, 3, 1], 0, 1) == (
-        "👥 Пользователи: всего 23 · обычных 19 · админов 3 · в блоке 1"
-    )
-    assert users_caption([23, 19, 3, 1], 1, 3).endswith(" · стр. 2/3")
-
-
-# --- broadcast -------------------------------------------------------------
-
-
 def test_broadcast_state_keeps_short_text_verbatim() -> None:
     text = "Привет!\n\nСервер <b>обновляется</b> в 02:00."
 
@@ -403,14 +373,3 @@ def test_broadcast_state_marks_the_600_char_cut() -> None:
     assert len(state["tx"]) == 600
     assert state["more"] == 100
     assert (state["ok"], state["fail"], state["st"]) == (4, 1, "done")
-
-
-def test_broadcast_captions_and_dative_plural() -> None:
-    assert recipients_dative(1) == "1 пользователю"
-    assert recipients_dative(11) == "11 пользователям"
-    assert recipients_dative(21) == "21 пользователю"
-    assert recipients_dative(23) == "23 пользователям"
-    assert broadcast_caption(23) == (
-        "📢 Рассылка 23 пользователям — подтвердите в виджете выше."
-    )
-    assert broadcast_done_caption(21, 23) == "📢 Доставлено 21 из 23"

@@ -38,7 +38,6 @@ from tj_bot.services.hub_views import (
     HubStatusSource,
     clamp_page,
     details_link,
-    hub_caption,
     hub_state,
 )
 from tj_bot.services.jackett import (
@@ -161,7 +160,6 @@ async def open_hub(
         message.chat.id,
         HUB,
         state,
-        hub_caption(config.is_admin(user_id)),
         repo=repo,
         kind=HUB,
         context=context,

@@ -424,15 +424,6 @@ def list_state(
     return pack_list(state)
 
 
-def list_caption(state: dict[str, Any], query_text: str | None) -> str:
-    first = int(state["i0"]) + 1
-    last = int(state["i0"]) + len(state["rows"])
-    text = f"Результаты {first}–{last} из {state['n']}"
-    if query_text:
-        text += f" по запросу «{query_text}»"
-    return html.escape(f"{text} · {state['sl']}")
-
-
 def done_state(qh: str, rev: int, text: str, **context_line: str) -> dict[str, Any]:
     """A list or sheet reduced to one «✓ …» line (their PROTOCOLs §3)."""
     state: dict[str, Any] = {"v": 1, "r": rev, "qh": qh[:8], **context_line}
@@ -484,10 +475,3 @@ def filters_done_text(filters: ResultFilters, category: str | None, total: int) 
     summary = filters_summary(filters, category) or "фильтры сброшены"
     results = plural(total, "результат", "результата", "результатов")
     return f"Применено: {summary} · {total} {results}"
-
-
-def filters_caption(
-    query_text: str | None, filters: ResultFilters, category: str | None
-) -> str:
-    summary = filters_summary(filters, category) or "не заданы"
-    return html.escape(f"Фильтры поиска «{query_text or ''}» · Активно: {summary}")

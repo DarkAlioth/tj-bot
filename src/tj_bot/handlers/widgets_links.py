@@ -32,13 +32,13 @@ def make_send_admin_widget(
             await send_console_widget(bot, chat_id, repo, qbit)
             return
         if name == "dashboard":
-            state, caption, context = await build_dashboard(
+            state, context = await build_dashboard(
                 repo, qbit, monitor, started_at, tab="h", rev=FIRST_REV
             )
         else:
-            state, caption, context = await build_users(repo, config, "a", 0, FIRST_REV)
+            state, context = await build_users(repo, config, "a", 0, FIRST_REV)
         await send_widget(
-            bot, chat_id, name, state, caption, repo=repo, kind=name, context=context
+            bot, chat_id, name, state, repo=repo, kind=name, context=context
         )
 
     return send

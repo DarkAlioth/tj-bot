@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -67,18 +66,6 @@ def _arg_int(args: list[str]) -> int:
     return int(args[0]) if args and args[0].isdigit() else -1
 
 
-async def _edit_caption(bot: Bot, widget: WidgetMessage, caption: str) -> None:
-    """Refresh the fallback caption; best effort (identical text is rejected)."""
-    try:
-        await bot.edit_message_caption(
-            chat_id=widget.chat_id, message_id=widget.message_id, caption=caption
-        )
-    except TelegramAPIError:
-        logger.debug(
-            "Caption edit skipped for %s/%s", widget.chat_id, widget.message_id
-        )
-
-
 async def _find_torrent(
     qbit: QbittorrentClient, args: list[str]
 ) -> dict[str, Any] | None:
@@ -97,8 +84,8 @@ async def _find_torrent(
 
 async def picker_message(
     qbit: QbittorrentClient, torrent_hash: str
-) -> tuple[dict[str, Any], str, dict[str, Any]] | None:
-    """State, caption and context of a fresh picker; None when the torrent is gone."""
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """State and context of a fresh picker; None when the torrent is gone."""
     info = await qbit.torrent_info(torrent_hash)
     if info is None:
         return None
@@ -107,7 +94,7 @@ async def picker_message(
     name = str(info.get("name") or "?")
     state = views.picker_state(name, view, free_space, page=0, rev=1)
     context = {"h": torrent_hash, "n": name, "page": 0}
-    return state, views.picker_caption(name, view), context
+    return state, context
 
 
 async def send_picker_widget(
@@ -121,29 +108,28 @@ async def send_picker_widget(
     prepared = await picker_message(qbit, torrent_hash)
     if prepared is None:
         return False
-    state, caption, context = prepared
+    state, context = prepared
     await send_widget(
-        bot, chat_id, PICKER, state, caption, repo=repo, kind=PICKER, context=context
+        bot, chat_id, PICKER, state, repo=repo, kind=PICKER, context=context
     )
     return True
 
 
 async def _picker_finish(
-    bot: Bot, repo: TorrentRepo, widget: WidgetMessage, mode: str, caption: str
+    bot: Bot, repo: TorrentRepo, widget: WidgetMessage, mode: str
 ) -> None:
     """Switch the picker to a terminal mode (``go``, ``x``, ``gone``)."""
     state = views.picker_terminal(str(widget.context["n"]), mode, widget.rev + 1)
     await edit_widget_state(
         bot, widget.chat_id, widget.message_id, state, repo=repo, context=widget.context
     )
-    await _edit_caption(bot, widget, caption)
 
 
 async def _picker_gone(
     query: WidgetQuery, bot: Bot, repo: TorrentRepo, widget: WidgetMessage
 ) -> None:
     await answer_error(query, views.GONE_TEXT)
-    await _picker_finish(bot, repo, widget, "gone", views.GONE_TEXT)
+    await _picker_finish(bot, repo, widget, "gone")
 
 
 def _selection(
@@ -279,7 +265,7 @@ async def picker_start(
         # running is not a new download
         await repo.record_download(query.from_user.id, name, "server")
     await answer_json(query, {"r": widget.rev + 1, "m": "go"})
-    await _picker_finish(bot, repo, widget, "go", views.picker_started_caption(name))
+    await _picker_finish(bot, repo, widget, "go")
     await send_progress_widget(bot, widget.chat_id, repo, started, selected, total)
 
 
@@ -302,7 +288,7 @@ async def picker_cancel(
         await answer_error(query, views.QBIT_DOWN_TEXT)
         return
     await answer_json(query, {"r": widget.rev + 1, "m": "x"})
-    await _picker_finish(bot, repo, widget, "x", views.PICKER_CANCELLED_CAPTION)
+    await _picker_finish(bot, repo, widget, "x")
 
 
 # --- progress -----------------------------------------------------------------
@@ -330,7 +316,6 @@ async def send_progress_widget(
         chat_id,
         PROGRESS,
         state,
-        views.progress_caption(state),
         repo=repo,
         kind=PROGRESS,
         context=context,
@@ -367,7 +352,6 @@ async def _progress_sync(
         repo=repo,
         context={**widget.context, "st": phase},
     )
-    await _edit_caption(bot, widget, views.progress_caption(state))
 
 
 async def _progress_gone(bot: Bot, repo: TorrentRepo, widget: WidgetMessage) -> None:
@@ -384,7 +368,6 @@ async def _progress_gone(bot: Bot, repo: TorrentRepo, widget: WidgetMessage) -> 
         repo=repo,
         context={**widget.context, "st": "gone"},
     )
-    await _edit_caption(bot, widget, views.progress_caption(state))
 
 
 @widgets_server_router.widget_query(Verb("bg", "rf"), WidgetKind(PROGRESS))
@@ -500,7 +483,6 @@ async def progress_console(
 class ConsoleSnapshot:
     state: dict[str, Any]
     torrents: list[dict[str, Any]]
-    caption: str
 
 
 async def _console_snapshot(
@@ -513,7 +495,7 @@ async def _console_snapshot(
     state = views.console_state(
         torrents, transfer, free_space, alt, tab, page, rev, _now()
     )
-    return ConsoleSnapshot(state, torrents, views.console_caption(torrents, transfer))
+    return ConsoleSnapshot(state, torrents)
 
 
 def _console_context(widget: WidgetMessage, state: dict[str, Any]) -> dict[str, Any]:
@@ -528,17 +510,15 @@ async def send_console_widget(
     bot: Bot, chat_id: int, repo: TorrentRepo, qbit: QbittorrentClient
 ) -> None:
     try:
-        snapshot = await _console_snapshot(qbit, "all", 0, rev=1)
-        state, caption = snapshot.state, snapshot.caption
+        state = (await _console_snapshot(qbit, "all", 0, rev=1)).state
     except QbittorrentError:
         logger.exception("Console snapshot failed")
-        state, caption = views.console_unavailable(1, _now()), views.QBIT_DOWN_TEXT
+        state = views.console_unavailable(1, _now())
     await send_widget(
         bot,
         chat_id,
         CONSOLE,
         state,
-        caption,
         repo=repo,
         kind=CONSOLE,
         context={"tab": "all", "page": 0},
@@ -747,13 +727,12 @@ async def console_files(
         await answer_error(query, views.NOT_FOUND_TEXT)
         return
     await answer_json(query, {"ok": 1})
-    state, caption, context = prepared
+    state, context = prepared
     await send_widget(
         bot,
         widget.chat_id,
         PICKER,
         state,
-        caption,
         repo=repo,
         kind=PICKER,
         context=context,

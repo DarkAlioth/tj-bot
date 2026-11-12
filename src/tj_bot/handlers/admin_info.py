@@ -15,6 +15,7 @@ from tj_bot.config import AppConfig
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.filters.admin import AdminOnly
 from tj_bot.services import broadcaster
+from tj_bot.services.admin_views import format_duration
 from tj_bot.services.formatting import (
     DOWNLOADING_STATES,
     format_size,
@@ -34,14 +35,7 @@ STATS_WINDOW_DAYS = 7
 
 def format_uptime(started_at: datetime.datetime) -> str:
     delta = datetime.datetime.now(datetime.UTC) - started_at
-    minutes, _ = divmod(int(delta.total_seconds()), 60)
-    hours, minutes = divmod(minutes, 60)
-    days, hours = divmod(hours, 24)
-    if days:
-        return f"{days}д {hours}ч"
-    if hours:
-        return f"{hours}ч {minutes}м"
-    return f"{minutes}м"
+    return format_duration(int(delta.total_seconds()))
 
 
 @admin_info_router.message(Command("stats"))

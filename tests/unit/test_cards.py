@@ -214,14 +214,16 @@ def test_more_answer_caps_plot_and_people() -> None:
         cast=("Киллиан Мёрфи", "Эмили Блант", "Мэтт Деймон", "Роберт Дауни", "Х"),
     )
 
-    answer = more_answer(meta)
+    answer = more_answer(meta, make_torrent())
 
     assert len(answer["pl"]) <= 360 and answer["pl"].endswith("…")
     assert answer["pp"] == (
         "Реж. Кристофер Нолан · Киллиан Мёрфи, Эмили Блант, Мэтт Деймон, Роберт Дауни"
     )
     assert len(json.dumps(answer, ensure_ascii=False).encode()) <= 1024
-    assert more_answer(CardMeta()) == {"err": "Описание недоступно"}
+    assert more_answer(CardMeta(), make_torrent(description=None)) == {
+        "err": "Описание недоступно"
+    }
 
 
 def test_fmt_size_units_and_decimals() -> None:
@@ -411,4 +413,14 @@ def test_list_state_rows_meta_and_caption() -> None:
     )
     assert list_caption({"i0": 0, "rows": [], "n": 0, "sl": "Сиды ↓"}, None) == (
         "Результаты 1–0 из 0 · Сиды ↓"
+    )
+
+
+def test_plot_falls_back_to_the_jackett_description() -> None:
+    torrent = make_torrent(description="Пустыня &amp; специя. " * 8)
+    state = search_state(torrent, CTX, CardMeta(), rev=1, is_fav=False)
+    assert state["pl"].startswith("Пустыня & специя.") and state["pm"] == 1
+    assert more_answer(CardMeta(), torrent)["pl"].startswith("Пустыня & специя.")
+    assert "pl" not in search_state(
+        make_torrent(description=None), CTX, CardMeta(), rev=1, is_fav=False
     )

@@ -896,7 +896,7 @@ async def more_details(
         return
     _, torrent = found
     meta = await enricher.card_meta(torrent, budget=MORE_BUDGET)
-    await answer_json(query, more_answer(meta))
+    await answer_json(query, more_answer(meta, torrent))
 
 
 async def apply_enrichment(

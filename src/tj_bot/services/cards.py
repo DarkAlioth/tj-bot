@@ -323,9 +323,10 @@ def search_state(
     for key, value in lines:
         if value:
             state[key] = value
-    if meta.plot:
-        state["pl"] = cut(meta.plot, TEASER_CHARS)
-        if len(meta.plot) > TEASER_CHARS:
+    plot = card_plot(meta, torrent)
+    if plot:
+        state["pl"] = cut(plot, TEASER_CHARS)
+        if len(plot) > TEASER_CHARS:
             state["pm"] = 1
     url = html.unescape(torrent.details_url)
     if len(url) <= 64:
@@ -337,11 +338,20 @@ def search_state(
     return pack(state)
 
 
-def more_answer(meta: CardMeta) -> dict[str, str]:
+def card_plot(meta: CardMeta, torrent: Torrent) -> str | None:
+    """The tracker page's plot, else the description Jackett gave (stored escaped)."""
+    if meta.plot:
+        return meta.plot
+    description = html.unescape(torrent.description or "").strip()
+    return description or None
+
+
+def more_answer(meta: CardMeta, torrent: Torrent) -> dict[str, str]:
     """The ``more:<h>`` answer: the full plot and the wider cast."""
     answer = {}
-    if meta.plot:
-        answer["pl"] = cut(meta.plot, MORE_PLOT_CHARS)
+    plot = card_plot(meta, torrent)
+    if plot:
+        answer["pl"] = cut(plot, MORE_PLOT_CHARS)
     people = people_line(meta, MORE_PEOPLE_CHARS, 4)
     if people:
         answer["pp"] = people

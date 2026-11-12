@@ -30,7 +30,7 @@ from tj_bot.widgets.state import MAX_STATE_BYTES
 THIN_SPACE = " "
 # search PROTOCOL §1: least valuable first; dropping the teaser keeps the
 # full plot reachable through ``more``
-DROP_ORDER = ("pl", "pp", "aa", "ml", "dr", "u", "te", "m")
+DROP_ORDER = ("pl", "pp", "aa", "ml", "dr", "u", "te")
 TEASER_CHARS = 80
 MORE_PLOT_CHARS = 360
 MORE_PEOPLE_CHARS = 100
@@ -303,8 +303,6 @@ def search_state(
         state["q"] = [cut(chip, 12) for chip in chips[:5]]
     if label:
         state["cn"] = cut(label, 14)
-    if hue:
-        state["hu"] = hue
     state.update(
         tk=tracker_name(torrent.tracker),
         sd=torrent.seeders,
@@ -336,21 +334,7 @@ def search_state(
         state["fav"] = 1
     if meta.pending:
         state["en"] = 1
-    if meta.mosaic:
-        state["m"] = meta.mosaic
     return pack(state)
-
-
-def caption(state: dict[str, Any]) -> str:
-    """Fallback caption of the card (search PROTOCOL §4), HTML-escaped."""
-    title = state.get("tr") or state.get("ti", "")
-    seeders = int(state["sd"])
-    text = (
-        f"{title} · {state['sz']} · {fmt_int(seeders)} "
-        f"{plural(seeders, 'сид', 'сида', 'сидов')} · {state['tk']} · "
-        f"{int(state['i']) + 1} / {state['n']}"
-    )
-    return html.escape(text)
 
 
 def more_answer(meta: CardMeta) -> dict[str, str]:

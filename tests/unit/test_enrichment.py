@@ -10,5 +10,4 @@ async def test_null_enricher_returns_empty_meta_and_ignores_the_rest() -> None:
     assert meta == CardMeta()
     assert meta.pending is False
     enricher.prefetch([torrent])
-    await enricher.remember_poster("hash", "file")
     enricher.on_ready(MagicMock())

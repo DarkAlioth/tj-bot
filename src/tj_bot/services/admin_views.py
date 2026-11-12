@@ -87,7 +87,6 @@ class Health:
     db_size: int
     qbit: QbitSummary | None
     checked_at: int
-    scraper: tuple[int, int, int] | None = None
 
 
 def qbit_doc(summary: QbitSummary | None) -> dict[str, Any] | None:
@@ -112,9 +111,6 @@ def health_doc(health: Health) -> dict[str, Any]:
         "q": qbit_doc(health.qbit),
         "m": health.checked_at,
     }
-    if health.scraper is not None:
-        posters, queue, errors = health.scraper
-        doc["sc"] = {"p": posters, "q": queue, "e": errors}
     return doc
 
 

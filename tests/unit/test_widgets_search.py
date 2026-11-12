@@ -21,6 +21,7 @@ from tj_bot.handlers.widgets_search import (
     apply_enrichment,
     apply_filters,
     card_navigate,
+    close_sheet,
     download_torrent,
     list_page,
     list_verb,
@@ -245,14 +246,14 @@ def make_message() -> AsyncMock:
     return message
 
 
-async def test_search_sends_poster_then_card_and_prefetches() -> None:
+async def test_search_sends_the_card_and_prefetches() -> None:
     message = make_message()
     repo = make_repo()
     repo.find_recent_search.return_value = make_search(result_count=5)
     repo.get_result_page.return_value = make_torrent()
     following = [make_torrent(id=2, hash=HASH2), make_torrent(id=3, hash="c" * 32)]
     repo.get_result_list.return_value = following
-    enricher = make_enricher(CardMeta(poster_bytes=b"jpg", pending=True))
+    enricher = make_enricher(CardMeta(pending=True))
     bot = make_bot()
     jackett = AsyncMock(spec=JackettClient)
 
@@ -269,51 +270,22 @@ async def test_search_sends_poster_then_card_and_prefetches() -> None:
     jackett.search.assert_not_awaited()
     repo.record_search_event.assert_awaited_once_with(CHAT_ID, 1)
     enricher.card_meta.assert_awaited_once_with(
-        repo.get_result_page.return_value, budget=6.0
+        repo.get_result_page.return_value, budget=4.0
     )
-    bot.send_photo.assert_awaited_once()
-    assert bot.send_photo.await_args.args[0] == CHAT_ID
-    enricher.remember_poster.assert_awaited_once_with(HASH, "fid-sent")
+    bot.send_photo.assert_not_awaited()
     (widget,) = methods(bot, SendWidget)
     state = json.loads(widget.chat_data)
     assert (state["i"], state["n"], state["fc"], state["en"]) == (0, 5, 1, 1)
-    assert widget.caption.startswith("Дюна: Часть вторая · 45 ГБ")
+    assert widget.caption is None
     assert widget.reply_markup.inline_keyboard[0][0].text == "🔄"
     assert Upd.unpack(widget.reply_markup.inline_keyboard[0][0].callback_data).qh == QH
     repo.save_widget_message.assert_awaited_once()
     context = repo.save_widget_message.await_args.args[3]
-    assert context["h"] == HASH and context["photo_mid"] == PHOTO_MID
+    assert context["h"] == HASH and "photo_mid" not in context
     assert context["en"] == 1 and context["n"] == 5
     message.answer.return_value.delete.assert_awaited_once()
     enricher.prefetch.assert_called_once_with(following)
     assert repo.get_result_list.await_args.args[1:3] == (3, 1)
-
-
-async def test_search_without_poster_skips_the_photo_and_survives_send_errors() -> None:
-    message = make_message()
-    repo = make_repo()
-    repo.find_recent_search.return_value = make_search()
-    repo.get_result_page.return_value = make_torrent()
-    repo.get_result_list.return_value = []
-    bot = make_bot()
-    bot.send_photo.side_effect = TelegramBadRequest(
-        method=SendMessage(chat_id=1, text="x"), message="bad"
-    )
-    enricher = make_enricher(CardMeta(poster_file_id="fid"))
-
-    await search_widget(
-        cast(Message, message),
-        repo,
-        AsyncMock(spec=JackettClient),
-        make_config(),
-        enricher,
-        bot,
-        CommandObject(prefix="/", command="s", args="дюна"),
-    )
-
-    assert "photo_mid" not in repo.save_widget_message.await_args.args[3]
-    enricher.remember_poster.assert_not_awaited()
-    assert len(methods(bot, SendWidget)) == 1
 
 
 async def test_search_usage_hint_and_no_results() -> None:
@@ -439,10 +411,10 @@ def card_repo(context: dict[str, Any] | None = None, rev: int = 5) -> AsyncMock:
     return repo
 
 
-async def test_next_answers_full_state_then_edits_card_and_poster() -> None:
-    repo = card_repo({**CARD_CONTEXT, "photo_mid": PHOTO_MID})
+async def test_next_answers_full_state_at_once_then_edits_the_card() -> None:
+    repo = card_repo()
     bot = make_bot()
-    enricher = make_enricher(CardMeta(poster_file_id="fid2", genres=("драма",)))
+    enricher = make_enricher(CardMeta(genres=("драма",)))
     query = make_query("n:a1b2c3d4:3:se:000:ALL", bot)
 
     await card_navigate(
@@ -462,70 +434,22 @@ async def test_next_answers_full_state_then_edits_card_and_poster() -> None:
         "se",
         repo.get_result_page.await_args.args[4],
     )
+    # paging never waits for the tracker page: the push fills the card later
     enricher.card_meta.assert_awaited_once_with(
-        repo.get_result_page.return_value, budget=3.0
+        repo.get_result_page.return_value, budget=0.0
     )
     state = answer(bot)
     assert (state["i"], state["r"], state["h"], state["tr"], state["ml"]) == (
         4, 6, "2c9e77aa", "Дюна", "драма",
     )  # fmt: skip
     assert edited_state(bot, CARD_MID) == state
-    # answered before the edit, poster edited in between
     kinds = [type(c.args[0]).__name__ for c in bot.await_args_list]
     assert kinds == ["AnswerWidgetQuery", "EditMessageWidgetData"]
-    bot.edit_message_media.assert_awaited_once()
-    media = bot.edit_message_media.await_args.args[0]
-    assert media.media == "fid2"
-    assert bot.edit_message_media.await_args.kwargs == {
-        "chat_id": CHAT_ID,
-        "message_id": PHOTO_MID,
-    }
-    enricher.remember_poster.assert_awaited_once_with(HASH2, "fid-edited")
     repo.update_widget_message.assert_awaited_once()
     context = repo.update_widget_message.await_args.kwargs["context"]
-    assert (context["i"], context["h"], context["photo_mid"], context["en"]) == (
-        4,
-        HASH2,
-        PHOTO_MID,
-        0,
-    )
+    assert (context["i"], context["h"], context["en"]) == (4, HASH2, 0)
+    assert "photo_mid" not in context
     assert repo.update_widget_message.await_args.kwargs["rev"] == 6
-
-
-@pytest.mark.parametrize(("pending", "deleted"), [(True, False), (False, True)])
-async def test_prev_without_poster_deletes_the_photo_unless_pending(
-    pending: bool, deleted: bool
-) -> None:
-    repo = card_repo({**CARD_CONTEXT, "photo_mid": PHOTO_MID})
-    bot = make_bot()
-    query = make_query("p:a1b2c3d4:3:se:000:ALL", bot)
-
-    await card_navigate(
-        query, "p", ["a1b2c3d4", "3", "se", "000", "ALL"], repo, make_config(),
-        make_enricher(CardMeta(pending=pending)), bot,
-    )  # fmt: skip
-
-    assert repo.get_result_page.await_args.args[2] == 2
-    bot.edit_message_media.assert_not_awaited()
-    assert bot.delete_message.await_count == int(deleted)
-    context = repo.update_widget_message.await_args.kwargs["context"]
-    assert ("photo_mid" in context) is not deleted
-    assert answer(bot).get("en") == (1 if pending else None)
-
-
-async def test_card_without_photo_never_gets_one() -> None:
-    repo = card_repo()
-    bot = make_bot()
-    query = make_query("n:a1b2c3d4:3:se:000:ALL", bot)
-
-    await card_navigate(
-        query, "n", ["a1b2c3d4", "3", "se", "000", "ALL"], repo, make_config(),
-        make_enricher(CardMeta(poster_file_id="fid")), bot,
-    )  # fmt: skip
-
-    bot.send_photo.assert_not_awaited()
-    bot.edit_message_media.assert_not_awaited()
-    assert "photo_mid" not in repo.update_widget_message.await_args.kwargs["context"]
 
 
 async def test_sort_goes_to_card_zero_with_the_next_code_and_admin_flag() -> None:
@@ -712,13 +636,11 @@ async def test_filters_from_the_card_pick_up_its_open_list() -> None:
     assert "cats" not in json.loads(methods(bot, SendWidget)[0].chat_data)
 
 
-async def test_open_card_from_the_list_updates_the_card_and_finishes_the_list() -> None:
+async def test_open_card_from_the_list_sends_a_fresh_card_and_closes_the_list() -> None:
     list_row = make_row(
         "search-list", {"qh": QH, "card": CARD_MID}, rev=8, message_id=LIST_MID
     )
-    card_row = make_row(
-        "search", {**CARD_CONTEXT, "photo_mid": PHOTO_MID, "list": LIST_MID}
-    )
+    card_row = make_row("search", {**CARD_CONTEXT, "fc": 1, "list": LIST_MID})
     repo = make_repo({LIST_MID: list_row, CARD_MID: card_row})
     repo.get_result_page.return_value = make_torrent(id=2, hash=HASH2)
     bot = make_bot()
@@ -729,39 +651,36 @@ async def test_open_card_from_the_list_updates_the_card_and_finishes_the_list() 
         make_enricher(), bot,
     )  # fmt: skip
 
-    assert answer(bot) == {
-        "v": 1, "r": 9, "qh": "a1b2c3d4", "q": "дюна", "sl": "Сиды ↓",
-        "done": "Открыта карточка 14",
-    }  # fmt: skip
+    assert answer(bot) == {"ok": 1}
     assert repo.get_result_page.await_args.args[2] == 13
-    card_state = edited_state(bot, CARD_MID)
-    assert (card_state["i"], card_state["h"], card_state["r"]) == (13, "2c9e77aa", 6)
-    # no poster now and not pending: the old photo goes away
-    bot.delete_message.assert_awaited_once_with(CHAT_ID, PHOTO_MID)
-    assert edited_state(bot, LIST_MID)["done"] == "Открыта карточка 14"
-    list_update = [
-        c for c in repo.update_widget_message.await_args_list if c.args[1] == LIST_MID
-    ]
-    assert list_update[0].kwargs == {
-        "context": {"qh": QH, "card": CARD_MID, "done": 1},
-        "rev": 9,
-    }
+    (widget,) = methods(bot, SendWidget)
+    state = json.loads(widget.chat_data)
+    assert (state["i"], state["h"], state["fc"], state["r"]) == (13, "2c9e77aa", 1, 1)
+    assert methods(bot, EditMessageWidgetData) == []
+    bot.delete_message.assert_awaited_once_with(CHAT_ID, LIST_MID)
+    repo.delete_widget_message.assert_awaited_once_with(CHAT_ID, LIST_MID)
 
 
-async def test_open_card_survives_a_deleted_card() -> None:
+async def test_open_card_falls_back_to_the_done_state_when_the_list_stays() -> None:
     list_row = make_row(
         "search-list", {"qh": QH, "card": CARD_MID}, rev=8, message_id=LIST_MID
     )
     repo = make_repo({LIST_MID: list_row})
+    repo.get_result_page.return_value = make_torrent()
     bot = make_bot()
+    bot.delete_message.side_effect = TelegramBadRequest(
+        method=SendMessage(chat_id=1, text="x"), message="message can't be deleted"
+    )
 
     await open_card(
         make_query("cd", bot, LIST_MID), ["a1b2c3d4", "10", "se", "000", "ALL", "0"],
         repo, make_config(), make_enricher(), bot,
     )  # fmt: skip
 
-    assert answer(bot)["done"] == "Открыта карточка 1"
-    assert [m.message_id for m in methods(bot, EditMessageWidgetData)] == [LIST_MID]
+    assert answer(bot) == {"ok": 1}
+    assert len(methods(bot, SendWidget)) == 1  # the fresh card went out anyway
+    assert edited_state(bot, LIST_MID)["done"] == "Открыта карточка 1"
+    repo.delete_widget_message.assert_not_awaited()
 
 
 def sheet_repo(list_done: bool = False) -> AsyncMock:
@@ -782,7 +701,7 @@ def sheet_repo(list_done: bool = False) -> AsyncMock:
     return repo
 
 
-async def test_apply_filters_updates_card_list_and_sheet() -> None:
+async def test_apply_filters_sends_a_fresh_card_and_closes_list_and_sheet() -> None:
     repo = sheet_repo()
     bot = make_bot()
     token = category_token("Movies/HD")
@@ -792,11 +711,11 @@ async def test_apply_filters_updates_card_list_and_sheet() -> None:
         make_query("f", bot, SHEET_MID), args, repo, make_config(), make_enricher(), bot
     )
 
-    text = "Применено: сиды 1+ · 1–5 ГБ · Фильмы HD · 8 результатов"
-    assert answer(bot) == {"v": 1, "r": 4, "qh": "a1b2c3d4", "done": text}
+    assert answer(bot) == {"ok": 1}
     assert repo.count_results.await_args.args[:2] == (QH, "Movies/HD")
     assert repo.get_result_page.await_args.args[:4] == (QH, "Movies/HD", 0, "se")
-    card = edited_state(bot, CARD_MID)
+    (widget,) = methods(bot, SendWidget)
+    card = json.loads(widget.chat_data)
     assert (card["i"], card["n"], card["f"], card["c"], card["fa"]) == (
         0,
         8,
@@ -804,16 +723,14 @@ async def test_apply_filters_updates_card_list_and_sheet() -> None:
         token,
         1,
     )
-    assert edited_state(bot, LIST_MID) == {
-        "v": 1, "r": 9, "qh": "a1b2c3d4", "q": "дюна", "sl": "Сиды ↓", "done": text,
-    }  # fmt: skip
-    assert edited_state(bot, SHEET_MID)["done"] == text
-    updates = {c.args[1]: c.kwargs for c in repo.update_widget_message.await_args_list}
-    assert updates[SHEET_MID]["context"]["done"] == 1 and updates[SHEET_MID]["rev"] == 4
-    assert updates[LIST_MID]["context"]["done"] == 1
+    assert methods(bot, EditMessageWidgetData) == []
+    deleted = sorted(c.args[1] for c in bot.delete_message.await_args_list)
+    assert deleted == [LIST_MID, SHEET_MID]
+    gone = sorted(c.args[1] for c in repo.delete_widget_message.await_args_list)
+    assert gone == [LIST_MID, SHEET_MID]
 
 
-async def test_apply_filters_reset_and_done_list_left_alone() -> None:
+async def test_apply_filters_reset_skips_the_count_and_closes_a_done_list_too() -> None:
     repo = sheet_repo(list_done=True)
     bot = make_bot()
     args = ["a1b2c3d4", "3", "se", "120", "ALL", "000", "ALL"]
@@ -822,10 +739,11 @@ async def test_apply_filters_reset_and_done_list_left_alone() -> None:
         make_query("f", bot, SHEET_MID), args, repo, make_config(), make_enricher(), bot
     )
 
-    assert answer(bot)["done"] == "Применено: фильтры сброшены · 10 результатов"
+    assert answer(bot) == {"ok": 1}
     repo.count_results.assert_not_awaited()
-    assert sorted(m.message_id for m in methods(bot, EditMessageWidgetData)) == [
-        CARD_MID,
+    assert len(methods(bot, SendWidget)) == 1
+    assert sorted(c.args[1] for c in bot.delete_message.await_args_list) == [
+        LIST_MID,
         SHEET_MID,
     ]
 
@@ -841,7 +759,8 @@ async def test_apply_filters_with_an_empty_set_errors_and_changes_nothing() -> N
     )
 
     assert answer(bot) == {"err": "Ничего не найдено с этими фильтрами"}
-    assert methods(bot, EditMessageWidgetData) == []
+    assert methods(bot, EditMessageWidgetData) == [] and methods(bot, SendWidget) == []
+    bot.delete_message.assert_not_awaited()
 
     bot.reset_mock()
     await apply_filters(
@@ -997,10 +916,8 @@ async def test_more_answers_the_full_plot() -> None:
 # --- enrichment push -------------------------------------------------------------
 
 
-async def test_apply_enrichment_redraws_pending_cards_and_their_posters() -> None:
-    waiting = make_row(
-        "search", {**CARD_CONTEXT, "en": 1, "photo_mid": PHOTO_MID}, rev=3
-    )
+async def test_apply_enrichment_redraws_pending_cards() -> None:
+    waiting = make_row("search", {**CARD_CONTEXT, "en": 1}, rev=3)
     done = make_row("search", {**CARD_CONTEXT, "en": 0}, message_id=20)
     other = make_row("search", {**CARD_CONTEXT, "h": HASH2, "en": 1}, message_id=21)
     broken = make_row("search", {**CARD_CONTEXT, "en": 1}, rev=1, message_id=22)
@@ -1021,22 +938,15 @@ async def test_apply_enrichment_redraws_pending_cards_and_their_posters() -> Non
 
     bot.side_effect = edit
     enricher = make_enricher()
-    meta = CardMeta(poster_file_id="fid", genres=("драма",), mosaic="abc" * 24)
+    meta = CardMeta(genres=("драма",))
 
     await apply_enrichment(bot, repo, enricher, HASH, meta)
 
     repo.get_torrent_by_hash.assert_awaited_once_with(HASH)
     state = edited_state(bot, CARD_MID)
-    assert (state["r"], state["ml"], state["m"], state["fav"]) == (
-        4,
-        "драма",
-        "abc" * 24,
-        1,
-    )
+    assert (state["r"], state["ml"], state["fav"]) == (4, "драма", 1)
     assert "en" not in state
     assert [m.message_id for m in methods(bot, EditMessageWidgetData)] == [22, CARD_MID]
-    bot.edit_message_media.assert_awaited_once()
-    assert bot.edit_message_media.await_args.kwargs["message_id"] == PHOTO_MID
     updated = {c.args[1]: c.kwargs for c in repo.update_widget_message.await_args_list}
     assert updated[CARD_MID]["context"]["en"] == 0 and updated[CARD_MID]["rev"] == 4
     assert 22 not in updated
@@ -1094,3 +1004,29 @@ async def test_register_and_push_open_a_session_and_commit(
     await push_enrichment(
         bot, cast(Any, pool), enricher, HASH, CardMeta()
     )  # logged, not raised
+
+
+async def test_close_deletes_a_list_or_sheet_and_rejects_other_widgets() -> None:
+    list_row = make_row(
+        "search-list", {"qh": QH, "card": CARD_MID}, message_id=LIST_MID
+    )
+    repo = make_repo({LIST_MID: list_row, CARD_MID: make_row("search", CARD_CONTEXT)})
+    bot = make_bot()
+
+    await close_sheet(make_query("x", bot, LIST_MID), [], repo, bot)
+    assert answer(bot) == {"ok": 1}
+    bot.delete_message.assert_awaited_once_with(CHAT_ID, LIST_MID)
+    repo.delete_widget_message.assert_awaited_once_with(CHAT_ID, LIST_MID)
+
+    bot.reset_mock()
+    await close_sheet(make_query("x", bot, CARD_MID), [], repo, bot)
+    assert answer(bot) == {"err": STALE_QUERY_TEXT}
+    bot.delete_message.assert_not_awaited()
+
+    bot.reset_mock()
+    bot.delete_message.side_effect = TelegramBadRequest(
+        method=SendMessage(chat_id=1, text="x"), message="message can't be deleted"
+    )
+    await close_sheet(make_query("x", bot, LIST_MID), [], repo, bot)
+    assert answer(bot) == {"ok": 1}
+    assert edited_state(bot, LIST_MID)["done"] == "Закрыто"

@@ -13,9 +13,9 @@ button:active{transform:scale(.97)}
 .cel{animation:pop .6s}
 @keyframes pop{50%{transform:scale(1.08)}}
 .hx{min-width:0;flex:1}
-.st{font-size:.85em;font-weight:600;color:var(--tg-theme-accent-text-color)}
+.st{font-size:.85em;font-weight:600;color:var(--tg-theme-accent-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .er .st{color:var(--tg-theme-destructive-text-color)}
-.t{font-size:1.05em;font-weight:650;line-height:1.25;max-height:2.5em;overflow:hidden;margin-top:2px}
+.t{font-size:1.05em;font-weight:650;line-height:1.25;max-height:2.5em;overflow:hidden;overflow-wrap:anywhere;margin-top:2px}
 .bar{height:4px;border-radius:2px;background:var(--tg-theme-section-separator-color);margin-top:12px;overflow:hidden}
 .bar div{height:100%;border-radius:2px;background:var(--tg-theme-button-color);transition:width .4s}
 .gr{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
@@ -26,7 +26,7 @@ small{font-weight:400;color:var(--tg-theme-hint-color);font-size:.85em}
 .sk{position:absolute;right:10px;top:7px;width:48px;height:18px}
 .sk polyline{fill:none;stroke:var(--tg-theme-accent-text-color);stroke-width:1.5;stroke-linejoin:round}
 .ft{display:flex;gap:8px;margin-top:8px}
-.ft button{flex:1;white-space:nowrap;padding:0 8px}
+.ft button{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
 .g{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
 .on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
 .dg{color:var(--tg-theme-destructive-text-color)}
@@ -34,9 +34,8 @@ small{font-weight:400;color:var(--tg-theme-hint-color);font-size:.85em}
 .me{margin-top:10px;font-size:.8em;text-align:center;color:var(--tg-theme-hint-color)}
 .w{animation:bl .7s infinite alternate}
 @keyframes bl{to{color:transparent}}
-.to{font-size:.85em;margin-top:6px;text-align:center;color:var(--tg-theme-hint-color)}
-.to:empty{display:none}
-@media(prefers-reduced-motion:reduce){*{transition-duration:0s;animation-duration:0s}}
+.to{font-size:.85em;min-height:18px;margin-top:6px;text-align:center;color:var(--tg-theme-hint-color)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 <div id=R></div>
 <script>
@@ -62,7 +61,7 @@ function draw(){const s=S,st=s.st,done=isDone(s),er=st=='error'||st=='missingFil
 const lab=gone?'Удалено из qBittorrent':(done?'Готово':SV[st]||st)+(s.sz?' · '+fS(s.sz):'')+(done?' · '+(up?'остановлено':'раздаётся'):'');
 let h='<div class="hr '+(er?'er':done?'dn':pa?'pa':'')+'"><svg class="rg'+(cel?' cel':'')+'" viewBox="0 0 84 84"><circle cx=42 cy=42 r=34 /><circle class=p cx=42 cy=42 r=34 transform="rotate(-90 42 42)" style="stroke-dashoffset:'+(gone?214:214-2.14*p).toFixed(1)+'"/>'+(gone?'':done?'<path class=ok d="M30 43l8 8 16-17"/>':'<text class=pc id=pc x=42 y=42 dy=.36em text-anchor=middle>'+(s.sz?fP(p):'—')+'</text>')+'</svg><div class=hx><div class=st>'+lab+'</div><div class=t>'+esc(s.n)+'</div></div></div>';
 if(!gone)h+='<div class=bar><div style="width:'+p+'%"></div></div><div class=gr>'+tile('Скорость','↓ '+fS(s.ds)+'/с',spark())+tile('Отдача','↑ '+fS(s.us)+'/с')+tile('Осталось',done?'—':fE(s.eta))+tile('Загружено',fS(s.dn))+tile('Сиды · пиры',(s.se|0)+' · '+(s.pe|0))+tile('Рейтинг',(+s.ra||0).toFixed(2).replace('.',','))+tile('Файлы',s.ft?s.fc+' <small>из '+s.ft+'</small>':'—')+tile('Добавлен',s.ad?fD(s.ad):'—')+'</div>';
-if(cf)h+='<div class=ft><span class="q dg">Удалить?</span>'+bt('cf0','Отмена','g')+'</div><div class=ft>'+bt('del:0','Только из клиента','g dg')+bt('del:1','С файлами','g dg')+'</div>';
+if(cf)h+='<div class=ft><span class="q dg">Удалить?</span>'+bt('cf0','Отмена','g')+'</div><div class=ft>'+bt('del:0','Из клиента','g dg')+bt('del:1','С файлами','g dg')+'</div>';
 else if(!gone)h+='<div class=ft>'+(er?bt('rc','Повторить проверку',''):done?bt(up?'re':'pa',up?'Раздавать':'Остановить',''):bt(pa?'re':'pa',pa?'Возобновить':'Пауза',''))+(er||done?'':bt('fo','Форсировать',s.fo?'on':'g'))+'</div><div class=ft>'+bt('cf1','Удалить','g dg')+bt('con','Консоль','g')+'</div>';
 const old=bad||Date.now()/1e3-s.t>20;
 h+='<div class="me'+(old?' dg':'')+'" data-a=rf>'+(busy=='rf'?DOTS:(old?'нет связи · ':'')+(s.t?'обновлено '+fT(s.t):'ожидаю данные')+' ↻')+'</div><div class="to '+(to?to[1]:'')+'">'+(to?to[0]:'')+'</div>';

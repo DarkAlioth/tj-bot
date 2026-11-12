@@ -8,7 +8,6 @@ from yarl import URL
 
 from tj_bot.services.enrich import flaresolverr
 from tj_bot.services.enrich.fetch import decode_body, fetch_page, is_challenge
-from tj_bot.services.enrich.images import ImageError, download_image
 from tj_bot.services.enrich.model import ChallengeError, NotFoundError, ScrapeError
 
 from .conftest import serve
@@ -202,49 +201,6 @@ async def test_fetch_rejects_non_http_proxy(
     base, session = server
     with pytest.raises(ValueError, match="http"):
         await fetch_page(session, f"{base}/ok1251", proxy="socks5://127.0.0.1:1080")
-
-
-@pytest.mark.usefixtures("fast_network")
-async def test_download_image_retries_without_referer_on_404(
-    server: tuple[str, aiohttp.ClientSession], calls: dict[str, int]
-) -> None:
-    base, session = server
-    data = await download_image(
-        session, f"{base}/img.jpg", referer="https://megapeer.vip/t/1"
-    )
-    assert data == JPEG and calls["img"] == 2
-    with_ref = await download_image(
-        session, f"{base}/img-ref.jpg", referer="https://x/"
-    )
-    assert with_ref == JPEG
-
-
-@pytest.mark.usefixtures("fast_network")
-async def test_download_image_never_sends_referer_to_fastpic(
-    server: tuple[str, aiohttp.ClientSession], calls: dict[str, int]
-) -> None:
-    base, session = server
-    # the host rule is checked on the URL's host; the test server is not fastpic,
-    # so verify the decision helper separately from the transport
-    from tj_bot.services.enrich.images import _wants_referer
-
-    assert not _wants_referer("https://i123.fastpic.org/big/x.jpg", "https://t/")
-    assert _wants_referer("https://img.byrutgame.org/x.webp", "https://t/")
-    assert await download_image(session, f"{base}/img.jpg") == JPEG
-    assert calls["img"] == 1
-
-
-@pytest.mark.usefixtures("fast_network")
-async def test_download_image_rejects_large_and_non_images(
-    server: tuple[str, aiohttp.ClientSession],
-) -> None:
-    base, session = server
-    with pytest.raises(ImageError, match="too large|exceeds"):
-        await download_image(session, f"{base}/big.jpg", max_bytes=1000)
-    with pytest.raises(ImageError, match="not an image"):
-        await download_image(session, f"{base}/not-image")
-    with pytest.raises(NotFoundError):
-        await download_image(session, f"{base}/404")
 
 
 async def test_flaresolverr_solve_returns_html_and_stores_cookies(

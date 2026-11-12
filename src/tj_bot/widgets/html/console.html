@@ -3,21 +3,20 @@ body{margin:12px 14px}
 .n{font-variant-numeric:tabular-nums}
 .h{color:var(--tg-theme-hint-color);font-size:.85em}
 .f{display:flex;align-items:center;gap:6px}
-.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;flex:none;color:var(--c)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;flex:none;color:var(--c)}
 .r{transform:rotate(180deg)}
+.df{display:none}
 .t{border-top:2px solid;height:15px}
-button{font:inherit;height:36px;margin:0;padding:0 4px;border:0;border-radius:10px;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color);display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:.85em;font-weight:600;white-space:nowrap;flex:1}
-button:active{transform:scale(.97)}
+button{font:inherit;height:36px;padding:0 4px;border:0;border-radius:10px;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color);display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:.85em;font-weight:600;white-space:nowrap;flex:1}
 .d{color:var(--tg-theme-destructive-text-color)}
 .c{flex:none;padding:0 9px;height:28px;border-radius:999px;font-size:.8em;color:var(--tg-theme-subtitle-text-color)}
 .on{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
 .pn{background:var(--tg-theme-secondary-bg-color);border-radius:12px;padding:10px 12px}
-.b2{flex:1}
 .big{gap:3px;font-size:1.25em;font-weight:650}
 .sk{width:44px;height:16px;flex:none;fill:none;stroke-width:1.5;stroke:var(--c)}
-.dk{gap:6px;margin-top:8px}
+.dk{margin-top:8px}
 .ln,.dk{font-size:.76em;white-space:nowrap}
-.bar{flex:1;height:3px;border-radius:2px;background:var(--tg-theme-section-separator-color);overflow:hidden;min-width:24px}
+.bar{flex:1;height:3px;border-radius:2px;background:var(--tg-theme-section-separator-color);min-width:24px}
 .bar div{height:100%;background:var(--c);transition:width .4s}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--c);display:inline-block;margin-right:4px}
 .fold .ln,.fold .dk,.fold+div{display:none}
@@ -25,47 +24,51 @@ button:active{transform:scale(.97)}
 .tb{gap:4px;flex-wrap:wrap;margin-top:10px}
 .rw{position:relative;gap:9px;padding:4px 0 11px;border-bottom:1px solid var(--tg-theme-section-separator-color)}
 .rw .bar{position:absolute;left:27px;right:70px;bottom:6px}
-.nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rt{text-align:right;flex:none;line-height:1.15;font-size:.82em;font-weight:600}
 .ac{padding:6px 0 8px 27px;font-size:.92em;border-bottom:1px solid var(--tg-theme-section-separator-color)}
 .ar{margin-top:6px}
 .q{flex:none;width:32px}
-.sp{flex:1}
-.ms{text-align:center;padding:32px 0}
+.sp,.b2{flex:1}
+.ms{text-align:center;padding:32px 0;overflow-wrap:anywhere}
+.ac .n{max-height:2.7em;overflow:hidden}
+.pg{display:flex;gap:4px;margin-left:auto}
+.sl{animation:s .2s}
+@keyframes s{from{transform:translateX(var(--x))}}
 .w{animation:p 1s infinite}
 @keyframes p{50%{transform:scale(.93)}}
 .bz [data-a]{pointer-events:none}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
-<svg width="0" height="0" style="position:absolute"><symbol id="a" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol><symbol id="p" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="2.5"/></symbol></svg>
+<svg class="df"><symbol id="a" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol><symbol id="p" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="2.5"/></symbol></svg>
 <div id="m"></div>
 <script>
 const W=window.TelegramWidget,TABS={all:'Все',dl:'Загрузка',up:'Раздача',st:'Пауза',er:'Ошибка'};
 const cm=s=>String(s).replace('.',','),esc=s=>String(s).replace(/[<&]/g,c=>c=='<'?'&lt;':'&amp;');
-const fS=b=>{const u=['КБ','МБ','ГБ','ТБ'];let i=-1;do{b/=1024;i++}while(b>=1024&&i<3);return cm(String(b<100?b.toFixed(1):Math.round(b)).replace('.0',''))+' '+u[i]};
-const fV=b=>b<512?'0 КБ/с':fS(b)+'/с';
+const fS=b=>{const u=['КБ','МБ','ГБ','ТБ'];let i=-1;do{b/=1024;i++}while(b>=1024&&i<3);return cm(b<100?b.toFixed(1):Math.round(b))+' '+u[i]};
+const fV=b=>(b<512?'0 КБ':fS(b))+'/с';
 const fE=s=>{if(s<0)return'∞';const m=s/60|0,h=m/60|0;return h?h+' ч '+m%60+' м':Math.max(m,1)+' м'};
 const D=(c,t)=>'<div class="'+c+'">'+t+'</div>',P=(c,t)=>'<span class="'+c+'">'+t+'</span>',I=(k,c)=>'<svg class="i '+(c||'')+'"><use href="#'+k+'"/></svg>',B=(a,c,t)=>'<button class="'+c+(a==PB?' w':'')+'" data-a="'+a+'">'+t+'</button>';
 const hap=(k,a)=>{try{W.HapticFeedback[k](a)}catch(e){}};
 const hue=s=>({u:1,c:1,p:3,e:4})[s[0]]??(s[1]?2:0);
-let S={cnt:{},tr:{},rows:[]},open=null,det={},busy=0,PB=0,cfm=0,TM=0,TB=0,H=[],PV={},NV={},tk,tt;
+let S={cnt:{},tr:{},rows:[]},open=null,det={},busy=0,PB=0,cfm=0,TM=0,TB=0,AN=0,H=[],PV={},NV={},tk,tt;
 const sk=j=>{const a=H.map(x=>x[j]||0),m=Math.max(1,...a),n=a.length;return'<svg class="sk" viewBox="0 0 44 16"><polyline points="'+a.map((v,i)=>(i+12-n)*4+','+(15-13*v/m).toFixed(1)).join(' ')+'"/></svg>'};
 const bar=(k,p,c)=>{NV[k]=p;return D('bar '+(c||''),'<div data-k="'+k+'" style="width:'+(PV[k]??p)+'%"></div>')};
 const blk=(c,r,v,tot,j)=>D('b2 '+c,D('f big n',I('a',r)+(S.err?'—':fV(v)))+D('f ln h n',sk(j)+(S.err?'':fS(tot)+' всего')));
-function panel(){const t=S.tr,e=S.err,f=t.fs>0,q=f&&t.ft>0,u=q?1-t.fs/t.ft:0;return D('pn'+(open?' fold':''),D('f',blk('s0','r',t.d,t.dd,0)+blk('s1','',t.u,t.ud,1))+D('f dk h n','Свободно '+(f?fS(t.fs):'—')+(q?bar('fs',u*100,'s'+(u>.9?4:u>.8?2:1)):'')+P('sp','')+P(Date.now()/1e3-S.t>20?'d':'','<i class="dot s'+(e||!t.cs?4:1)+'"></i>обновлено '+(S.t?new Date(S.t*1e3).toLocaleTimeString('ru'):'—'))))}
+function panel(){const t=S.tr,e=S.err,f=t.fs>0,q=f&&t.ft>0,u=q?1-t.fs/t.ft:0;return D('pn'+(open?' fold':''),D('f',blk('s0','r',t.d,t.dd,0)+blk('s1','',t.u,t.ud,1))+D('f dk h n','Свободно '+(f?fS(t.fs):'—')+(q?bar('fs',u*100,'s'+(u>.9?4:u>.8?2:1)):'')+P('sp','')+P(Date.now()/1e3-S.t>20?'d':'','<i class="dot s'+(e||!t.cs?4:1)+'"></i>обновлено '+(S.t?new Date(S.t*1e3).toTimeString().slice(0,8):'—'))))}
 function tabs(){const c=S.cnt;let h='';if(!S.err&&c.all)for(const k in TABS)if(k!='er'||c.er)h+=B('t:'+k,'c'+(k==S.tab?' on':''),TABS[k]+' '+(c[k]||0));return h}
 function row(r){const s=r[2],k=s[0],v=r[4],h=r[0];return D('s'+hue(s),'<div class="f rw" data-a="x:'+h+'">'+I('pce'.includes(k)?'p':'a',k=='d'?'r':'')+P('nm',esc(r[1]))+P('rt n',('du'.includes(k)&&v>511?(k=='d'?'↓ ':'↑ ')+fV(v):'—')+D('h',k=='d'?fE(r[5]):'uc'.includes(k)?'×'+cm((r[6]||0).toFixed(2)):Math.round(r[3]*100)+'%'))+bar(h,r[3]*100)+'</div>'+(open==h?acc(r):''))}
 function acc(r){const s=r[2],d=det[open],h=r[0],pz='pc'.includes(s[0]);return D('ac',(d?D('h n',esc(d.l))+D('h nm',esc(d.sp)):D('h','…'))+D('f ar',B((pz?'re:':'pa:')+h,'',pz?'Старт':'Пауза')+B('fo:'+h,'','Форс')+B('fi:'+h,'','Файлы'))+D('f ar',cfm==2?B('c:0','','Отмена')+B('del:'+h+':0','d','Без файлов')+B('del:'+h+':1','d','С файлами'):['top','up','down','bottom'].map((p,i)=>B('pr:'+h+':'+p,'q',I('a',(i>1?'r':'')+(i%3?'':' t')))).join('')+P('sp','')+B('c:2','d','Удалить')))}
-function list(){const r=S.rows;if(!r.some(x=>x[0]==open))open=null;return S.err?D('ms',esc(S.err)+'<br><br>'+B('rf','c on','Повторить')):r.length?r.map(row).join(''):D('ms h','Нет активных задач')}
-function foot(){const c=S.cnt,n=S.np||1,p=S.pg||0;return TM?P('h'+(TB?' d':''),TM):(S.err?'':B('alt','c'+(S.tr.alt?' on':''),'Тихий режим')+(cfm==1?P('h','Все на паузу?')+B('sa','c on','Да')+B('c:0','c','Нет'):c.dl+c.up>0?B('c:1','c','Пауза всех'):c.all?B('ra','c','Запустить все'):''))+P('sp','')+(!S.err&&n>1?B('pg:'+(p-1),'c','‹')+P('c n',(p+1)+' / '+n)+B('pg:'+(p+1),'c','›'):'')}
-function draw(){const l=list();document.getElementById('m').innerHTML=panel()+D('f tb',tabs())+l+D('f tb',foot());document.body.className=busy?'bz':'';document.body.offsetWidth;for(const b of document.querySelectorAll('[data-k]'))b.style.width=(PV[b.dataset.k]=NV[b.dataset.k])+'%'}
-function apply(a){if(a.x)det[a.x.h]=a.x;if(a.tr){H.push([a.tr.d,a.tr.u]);H.length>12&&H.shift();H.length<2&&(H=Array(12).fill(H[0]))}if(a.rows||a.err){S={cnt:{},tr:{},rows:[],...a};if(a.err)S.rows=[]}else{Object.assign(S,a);if(a.row){const i=S.rows.findIndex(x=>x[0]==a.row[0]);i<0||(S.rows[i]=a.row)}}}
+function list(){const r=S.rows;if(!r.some(x=>x[0]==open))open=null;return S.err?D('ms',esc(S.err)+'<br>'+B('rf','c on','Повторить')):r.length?r.map(row).join(''):D('ms h','Нет задач')}
+function foot(){const c=S.cnt,n=S.np||1,p=S.pg||0;return TM?P('h'+(TB?' d':''),TM):(S.err?'':B('alt','c'+(S.tr.alt?' on':''),'Тихий режим')+(cfm==1?P('h','Все на паузу?')+B('sa','c on','Да')+B('c:0','c','Нет'):c.dl+c.up>0?B('c:1','c','Пауза всех'):c.all?B('ra','c','Запустить все'):''))+(!S.err&&n>1?P('pg',B('pg:'+(p-1),'c','‹')+P('c n',(p+1)+' / '+n)+B('pg:'+(p+1),'c','›')):'')}
+function draw(){const l=list();document.getElementById('m').innerHTML=panel()+D('f tb',tabs())+D(AN?'sl" style="--x:'+AN*24+'px':'',l)+D('f tb',foot());AN=0;document.body.className=busy?'bz':'';document.body.offsetWidth;for(const b of document.querySelectorAll('[data-k]'))b.style.width=(PV[b.dataset.k]=NV[b.dataset.k])+'%'}
+function apply(a){if(a.x)det[a.x.h]=a.x;if(a.tr){H.push([a.tr.d,a.tr.u]);H.length>12&&H.shift()}if(a.rows||a.err)S={cnt:{},tr:{},...a,rows:a.rows||[]};else{Object.assign(S,a);if(a.row){const i=S.rows.findIndex(x=>x[0]==a.row[0]);i<0||(S.rows[i]=a.row)}}}
 function toast(t,bad){TM=t;TB=bad;hap('notificationOccurred',bad?'error':'success');clearTimeout(tt);tt=setTimeout(()=>{TM=0;draw()},bad?2600:1600)}
 function send(d){if(!W||busy)return;busy=1;PB=d=='bg'||d[0]=='x'?0:d;draw();W.request(d).then(a=>{let j={};try{j=JSON.parse(a.result)||{}}catch(e){}done(d,j)},e=>done(d,{err:e&&e.code=='TIMEOUT'?'Бот не ответил':'Ошибка связи',cx:1}))}
 function done(d,j){busy=PB=0;const snap=/^(bg|rf|t:|pg:)/.test(d);if(j.err&&(j.cx||!snap)){if(d=='bg')S.t=0;else toast(j.err,1)}else{apply(j);if(!snap&&d[0]!='x')toast('Готово')}draw()}
 function tick(){busy||send('bg')}
 function loop(){clearInterval(tk);tk=setInterval(tick,5200)}
-document.body.addEventListener('click',ev=>{const b=ev.target.closest('[data-a]');if(!b||busy)return;const a=b.dataset.a,[v,g]=a.split(':');cfm=v=='c'?+g:0;if(v=='c')draw();else if(v=='x'){open=open==g?null:g;open?send(a):draw()}else{hap('impactOccurred','light');send(a)}});
+document.body.addEventListener('click',ev=>{const b=ev.target.closest('[data-a]');if(!b||busy)return;const a=b.dataset.a,[v,g]=a.split(':');cfm=v=='c'?+g:0;if(v=='c')draw();else if(v=='x'){open=open==g?null:g;open?send(a):draw()}else{hap('impactOccurred','light');send(a);AN=v=='pg'?Math.sign(g-S.pg):v=='t'?1:0}});
 function fromState(){let j=null;try{j=JSON.parse(W&&W.chatData)}catch(e){}if(j&&!(j.r<S.r))apply(j);draw()}
 fromState();
 if(W){W.onEvent('chatDataChanged',fromState);W.onEvent('activated',()=>{Date.now()/1e3-S.t>5&&tick();loop()});W.onEvent('deactivated',()=>clearInterval(tk));tick();loop()}

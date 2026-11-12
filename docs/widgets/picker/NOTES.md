@@ -57,3 +57,21 @@ remaining ~100 B of headroom is reserved; anything added must remove something.
   Screenshots in `shots/` (dark/light, 320/360/430, pending, page 2, confirm, errors, terminal views).
 - Profile audit (grep for out-of-profile tokens): clean; 52 CSS rules, 1 keyframes; no opacity,
   filters, images, inputs or focus handling.
+
+## QA pass 2026-11-12
+
+- Overflow-proofing: title box gets `overflow-wrap:anywhere` (80-char names without spaces wrap inside the
+  2-line clamp); chips are `white-space:nowrap` (never break inside a chip, the row wraps instead); the
+  heading label (`.hd b`) is a one-line ellipsis.
+- Height: the stress page (5 class chips, 3 folder headers between 6 files, 2-line capacity line, «не
+  хватает») was 620 px at 320. Chips are now 24 px / `.75em` / 8 px padding with 5 px gaps (7 chips fit in two
+  rows at 320), and the toast moved from its own line into the «Файлы» heading label (`.tm`, same row as
+  the pager, so it never changes the height); card/heading/footer margins 10 → 8 / 6 px and rows 4 → 3 px
+  padding → 549 px at 320 with the 22 px time band (539 with a caption below), 503 px for the typical scenario.
+- Reduced motion: the old `*{transition-duration:0s}` lost to the class selectors; now
+  `*{transition:none!important;animation:none!important}`.
+- `mock.json`: top-level `caption` (needed for `cap=below` in the harness) and scenario #8 «Стресс» with
+  raw 80-char file names, deep folder paths, 5 classes, page 124 / 334 and a free-space deficit. The raw
+  names deliberately exceed the protocol caps (28 / 16 / 90) to prove the CSS; the caps stay as they are
+  (`mock_gen.py` does not emit this scenario — it is hand-written in `mock.json`).
+- Size: 8 988 B raw / **3 995 B** zlib-9.

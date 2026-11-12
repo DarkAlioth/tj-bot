@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tj_bot.config import Settings
 from tj_bot.db.meta_repo import MetaRepo, is_expired
 from tj_bot.db.models import Torrent, TorrentMetaRow
-from tj_bot.services.enrich import flaresolverr, images
+from tj_bot.services.enrich import flaresolverr
 from tj_bot.services.enrich.fetch import fetch_page, host_of, is_challenge
 from tj_bot.services.enrich.model import (
     ChallengeError,
@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 CONCURRENCY = 4
 BREAKER_FAILURES = 3
 BREAKER_SECONDS = 600
-POSTER_TIMEOUT_SECONDS = 5.0
 PRIORITY_CARD = 0
 PRIORITY_PREFETCH = 1
 # TorrentMeta fields the card uses (ids kept for a later rating lookup)
@@ -71,13 +70,6 @@ CATEGORY_HUES = (
     ("Books", 82),
 )
 DEFAULT_HUE = 212
-
-
-def category_hue(category: str) -> int:
-    for prefix, hue in CATEGORY_HUES:
-        if category.startswith(prefix):
-            return hue
-    return DEFAULT_HUE
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,22 +158,12 @@ def card_from_row(target: Target, row: TorrentMetaRow) -> CardMeta:
         translation=tuple(meta.get("translation") or ()),
         subtitles=tuple(meta.get("subtitles") or ()),
         plot=meta.get("plot"),
-        mosaic=row.mosaic,
-        poster_file_id=row.poster_file_id,
-        poster_bytes=row.poster_bytes,
     )
 
 
 def meta_json(meta: TorrentMeta) -> dict[str, object]:
     data = dataclasses.asdict(meta)
     return {key: data[key] for key in META_KEYS}
-
-
-def _poster_title(target: Target, meta: TorrentMeta | None) -> str:
-    if meta is not None and (meta.title_ru or meta.title_en):
-        return meta.title_ru or meta.title_en or target.title
-    parsed = parse_title(target.title)
-    return parsed.title_ru or parsed.title_en or target.title
 
 
 class EnrichmentService:
@@ -205,6 +187,8 @@ class EnrichmentService:
         self._timeout = fetch_timeout_seconds
         self._concurrency = concurrency
         self._breaker = breaker or HostBreaker()
+        self._solver_lock = asyncio.Lock()
+        self._solved = False
         self._session: aiohttp.ClientSession | None = None
         self._queue: asyncio.PriorityQueue[tuple[int, int, str]] = (
             asyncio.PriorityQueue()
@@ -253,13 +237,6 @@ class EnrichmentService:
     def prefetch(self, torrents: Sequence[Torrent]) -> None:
         for torrent in torrents:
             self._enqueue(Target.of(torrent), PRIORITY_PREFETCH)
-
-    async def remember_poster(self, torrent_hash: str, file_id: str) -> None:
-        async with self._pool() as session:
-            await MetaRepo(session).set_poster_file_id(torrent_hash, file_id)
-            await session.commit()
-
-    # --- queue ---------------------------------------------------------------
 
     def _enqueue(self, target: Target, priority: int) -> _Job:
         job = self._jobs.get(target.hash)
@@ -312,7 +289,6 @@ class EnrichmentService:
             # nothing is stored: the card is retried once the breaker closes
             return base_card(target)
         status, meta, error = await self._scrape(target, host)
-        poster, mosaic = await self._poster(target, meta)
         async with self._pool() as session:
             row = await MetaRepo(session).upsert(
                 torrent_hash=target.hash,
@@ -320,8 +296,6 @@ class EnrichmentService:
                 details_url=target.details_url,
                 status=status,
                 meta=meta_json(meta) if meta is not None else {},
-                poster_bytes=poster,
-                mosaic=mosaic,
                 error=error,
             )
             await session.commit()
@@ -375,53 +349,42 @@ class EnrichmentService:
             return await self._solve(session, url)
 
     async def _solve(self, session: aiohttp.ClientSession, url: str) -> str:
-        try:
-            solution = await flaresolverr.solve(
-                session, self._flaresolverr_url or "", url, proxy=self._proxy
-            )
-        except ScrapeError as exc:
-            msg = f"flaresolverr failed for {url}: {exc}"
-            raise ChallengeError(msg) from exc
-        self._user_agent = solution.user_agent or self._user_agent
-        if is_challenge(solution.status, {}, solution.html):
-            msg = f"flaresolverr returned a challenge page for {url}"
-            raise ChallengeError(msg)
-        return solution.html
+        """Fetch through FlareSolverr, one challenge at a time.
 
-    async def _poster(
-        self, target: Target, meta: TorrentMeta | None
-    ) -> tuple[bytes, str | None]:
-        """Prepared JPEG + mosaic: poster, else first screenshot, else a cover."""
-        candidates = meta.poster_urls[:1] + meta.screenshots[:1] if meta else []
-        for url in candidates:
+        Parallel solves time the solver out; after the first one the session
+        carries the clearance cookies, so later pages are retried directly
+        before the solver is asked again.
+        """
+        async with self._solver_lock:
+            if self._solved:
+                try:
+                    return await fetch_page(
+                        session,
+                        url,
+                        proxy=self._proxy,
+                        timeout_seconds=self._timeout,
+                        user_agent=self._user_agent,
+                    )
+                except ChallengeError:
+                    logger.info("Clearance for %s expired, solving again", url)
             try:
-                raw = await images.download_image(
-                    self._require_session(),
-                    url,
-                    proxy=self._proxy,
-                    retries=2,
-                    referer=target.details_url,
-                    timeout_seconds=POSTER_TIMEOUT_SECONDS,
-                    user_agent=self._user_agent,
+                solution = await flaresolverr.solve(
+                    session, self._flaresolverr_url or "", url, proxy=self._proxy
                 )
-                return await asyncio.to_thread(_prepare, raw)
             except ScrapeError as exc:
-                logger.info("Poster %s unusable: %s", url, exc)
-        cover = await asyncio.to_thread(
-            images.generated_cover,
-            _poster_title(target, meta),
-            category_hue(target.category),
-        )
-        return cover, None
+                msg = f"flaresolverr failed for {url}: {exc}"
+                raise ChallengeError(msg) from exc
+            self._user_agent = solution.user_agent or self._user_agent
+            if is_challenge(solution.status, {}, solution.html):
+                msg = f"flaresolverr returned a challenge page for {url}"
+                raise ChallengeError(msg)
+            self._solved = True
+            return solution.html
 
     def _require_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             raise RuntimeError("EnrichmentService is not started")
         return self._session
-
-
-def _prepare(raw: bytes) -> tuple[bytes, str]:
-    return images.prepare_photo(raw), images.mosaic(raw)
 
 
 def build_enricher(

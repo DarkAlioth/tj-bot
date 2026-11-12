@@ -28,3 +28,15 @@
 - `request()` is called synchronously in the click handler; one in flight; no background requests.
 - `touch-action` auto everywhere; row taps are plain clicks; the leading 20 px hold only the avatar (not a control).
 - Body padding keeps the time band clear; the bot sends a caption anyway.
+
+## QA pass 2026-11-12
+
+- Overflow-proofing: the name row is a flex line — name in `<i>` with a one-line ellipsis, badges
+  `flex:none`, so «супер/админ/блок» stay visible next to a 24-char name; counts column `nowrap`; tab
+  chips are `.72em` / 7 px padding with `min-width:0` + ellipsis as the shrink path (4 chips with 4-digit
+  counts overflowed by 33 px at 320); action buttons ellipsize instead of spilling.
+- Tab and pager answers slide `#l` 200 ms in the tap direction (`.sl`, `--x`); the tapped chip shows the
+  3-dot pulse and «Загружаю…» meanwhile. Reduced motion: `!important` rule.
+- `mock.json`: #7 «Стресс» (8 × 24-char Cyrillic names incl. one without spaces, 16-char usernames, a
+  badge on every row, 5-digit counts, 12-digit ids, page 50 / 99, 40-char activity titles).
+- Size: 8 644 B raw / **3 758 B** zlib-9. Heights at 320: 538 list, 538 with a row open.

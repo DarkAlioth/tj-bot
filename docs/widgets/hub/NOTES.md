@@ -93,3 +93,20 @@ main user 443 px · main admin + status 438 px (2 chips) / ~500 px (5 chips) · 
 - `gen/mock_gen.py` — regenerates `mock.json` and prints chat_data sizes (`python3 -I gen/mock_gen.py`).
 - `gen/shot.js` — Playwright screenshot runner used for the harness checks.
 - `preview/*.png` — harness screenshots (dark/light, 320–430 px).
+
+## QA pass 2026-11-12 (device feedback: overflow, cramped screens, responsiveness)
+
+- Overflow-proofing: every `<button>` is now `min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`
+  (padding 8 → 6 px so «Пользователи» fits the 3-column admin row at 320 px); the greeting (`.hi`) and the
+  favorite titles (`.tt`) get `overflow-wrap:anywhere` (60-char titles without spaces wrap inside the 2-line
+  box instead of running past the bubble). Recent-query chips are capped at `max-width:48%` (+ `box-sizing:
+  border-box`, the padding used to push a 100 %-wide chip 20 px past the edge): a 40-char query shows ~18
+  chars with an ellipsis and never takes a full row, so 5 chips are ≤ 3 rows (main tab 599 → 512 px at 320).
+- Caption is now below the widget: nothing depends on the time band; `padding-bottom:max(12px, inset)` gives
+  12 px with `cap=below`. Verified with and without the caption.
+- Motion unchanged (tab/pager slide 220 ms with direction, 3-dot pending, `#t` toast line has a fixed
+  `min-height` so toasts never shift the layout). Reduced motion already handled by selector.
+- Stress scenarios added to `mock.json` (#7 main, #8 history, #9 favorites): 40-char queries (one without
+  spaces), 5-digit counts, 1234 favorites («1 / 309»), 60-char titles without spaces. Heights at 320:
+  main 512, history 527, favorites 518 / 543 with the accordion.
+- Size: 9 326 B raw / **4 079 B** zlib-9.

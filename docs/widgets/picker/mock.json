@@ -1,4 +1,5 @@
 {
+ "caption": "📤 Дом Дракона / House of the Dragon [S02] — выберите файлы · 40 из 40, 39,4 ГБ из 39,4 ГБ",
  "scenarios": [
   {
    "name": "TV season · 3 folders · 40 files",
@@ -3478,6 +3479,333 @@
    },
    "publicData": null,
    "answers": {}
+  },
+  {
+   "name": "Стресс · 80-симв. имена без пробелов, глубокие папки, нет места",
+   "chatData": {
+    "v": 1,
+    "r": 1,
+    "m": "pick",
+    "n": "Dom.Drakona.S02.COMPLETE.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.Rus.Eng.Ukr.v2",
+    "c": 2000,
+    "s": 2147483647,
+    "k": 1999,
+    "z": 2047483647,
+    "fs": 1200000000,
+    "p": 123,
+    "q": 334,
+    "cl": [
+     [
+      "v",
+      1234,
+      1234
+     ],
+     [
+      "a",
+      321,
+      320
+     ],
+     [
+      "s",
+      345,
+      345
+     ],
+     [
+      "r",
+      88,
+      88
+     ],
+     [
+      "o",
+      12,
+      12
+     ]
+    ],
+    "d": [
+     [
+      "Season.02.Complete.2160p.WEB-DL/Subs/Russian/Forced.SDH",
+      1234,
+      1234
+     ],
+     [
+      "Season.02.Complete.2160p.WEB-DL/Extras/BehindTheScenes",
+      666,
+      665
+     ],
+     [
+      "Season.02.Complete.2160p.WEB-DL/Audio/Commentary.Tracks",
+      100,
+      0
+     ]
+    ],
+    "f": [
+     [
+      0,
+      "Dom.Drakona.S02E01.Nasledniki.drakona.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.mkv",
+      23456789,
+      "v",
+      1,
+      0
+     ],
+     [
+      1,
+      "Dom.Drakona.S02E02.Printc.Negodyai.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.rus.srt",
+      12,
+      "s",
+      1,
+      0
+     ],
+     [
+      2,
+      "Dom.Drakona.S02E03.Vtorogo.svoego.imeni.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.mka",
+      345678,
+      "a",
+      0,
+      0
+     ],
+     [
+      3,
+      "Dom.Drakona.S02E04.Krasnyi.drakon.i.zolotoi.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.rar",
+      4567890,
+      "r",
+      1,
+      1
+     ],
+     [
+      4,
+      "Dom.Drakona.S02E05.Regent.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.Extras.Making.Of.mkv",
+      19876543,
+      "v",
+      1,
+      1
+     ],
+     [
+      5,
+      "Дом.Дракона.S02E06.Улыбающийся.могильщик.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.nfo",
+      3,
+      "o",
+      1,
+      2
+     ]
+    ]
+   },
+   "publicData": null,
+   "answers": {
+    "re:^tg:": {
+     "ok": 1
+    },
+    "re:^pg:(\\d+)$": {
+     "r": 1,
+     "p": 124,
+     "k": 1999,
+     "z": 2047483647,
+     "cl": [
+      [
+       "v",
+       1234,
+       1234
+      ],
+      [
+       "a",
+       321,
+       320
+      ],
+      [
+       "s",
+       345,
+       345
+      ],
+      [
+       "r",
+       88,
+       88
+      ],
+      [
+       "o",
+       12,
+       12
+      ]
+     ],
+     "d": [
+      [
+       "Season.02.Complete.2160p.WEB-DL/Subs/Russian/Forced.SDH",
+       1234,
+       1234
+      ],
+      [
+       "Season.02.Complete.2160p.WEB-DL/Extras/BehindTheScenes",
+       666,
+       665
+      ],
+      [
+       "Season.02.Complete.2160p.WEB-DL/Audio/Commentary.Tracks",
+       100,
+       0
+      ]
+     ],
+     "f": [
+      [
+       6,
+       "Dom.Drakona.S02E01.Nasledniki.drakona.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.mkv",
+       23456789,
+       "v",
+       1,
+       0
+      ],
+      [
+       7,
+       "Dom.Drakona.S02E02.Printc.Negodyai.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.rus.srt",
+       12,
+       "s",
+       1,
+       0
+      ],
+      [
+       8,
+       "Dom.Drakona.S02E03.Vtorogo.svoego.imeni.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.mka",
+       345678,
+       "a",
+       0,
+       0
+      ],
+      [
+       9,
+       "Dom.Drakona.S02E04.Krasnyi.drakon.i.zolotoi.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.rar",
+       4567890,
+       "r",
+       1,
+       1
+      ],
+      [
+       10,
+       "Dom.Drakona.S02E05.Regent.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.Extras.Making.Of.mkv",
+       19876543,
+       "v",
+       1,
+       1
+      ],
+      [
+       11,
+       "Дом.Дракона.S02E06.Улыбающийся.могильщик.2160p.AMZN.WEB-DL.DDP5.1.Atmos.HDR10Plus.DV.H.265-NTb.nfo",
+       3,
+       "o",
+       1,
+       2
+      ]
+     ]
+    },
+    "none": {
+     "r": 2,
+     "p": 0,
+     "k": 0,
+     "z": 0,
+     "cl": [
+      [
+       "a",
+       1990,
+       0
+      ],
+      [
+       "o",
+       10,
+       0
+      ]
+     ],
+     "d": [
+      [
+       "1972 - Machine …",
+       249,
+       0
+      ],
+      [
+       "1974 - Burn",
+       249,
+       0
+      ],
+      [
+       "1984 - Perfect …",
+       249,
+       0
+      ],
+      [
+       "1987 - House of…",
+       248,
+       0
+      ],
+      [
+       "1990 - Slaves a…",
+       249,
+       0
+      ],
+      [
+       "Другие папки",
+       756,
+       0
+      ]
+     ],
+     "f": [
+      [
+       0,
+       "01. Deep Purple - Track 1.f…",
+       28672,
+       "a",
+       0,
+       0
+      ],
+      [
+       1,
+       "02. Deep Purple - Track 2.f…",
+       29696,
+       "a",
+       0,
+       0
+      ],
+      [
+       2,
+       "03. Deep Purple - Track 3.f…",
+       30720,
+       "a",
+       0,
+       0
+      ],
+      [
+       3,
+       "04. Deep Purple - Track 4.f…",
+       31744,
+       "a",
+       0,
+       0
+      ],
+      [
+       4,
+       "05. Deep Purple - Track 5.f…",
+       32768,
+       "a",
+       0,
+       0
+      ],
+      [
+       5,
+       "06. Deep Purple - Track 6.f…",
+       33792,
+       "a",
+       0,
+       0
+      ]
+     ]
+    },
+    "re:^(all|qp:|tf:)": {
+     "ok": 1
+    },
+    "go": {
+     "r": 2,
+     "m": "go"
+    },
+    "x": {
+     "r": 2,
+     "m": "x"
+    }
+   }
   }
  ]
 }

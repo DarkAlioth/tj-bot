@@ -37,6 +37,11 @@ from tj_bot.services.formatting import padded
 from tj_bot.services.jackett import JackettClient
 from tj_bot.services.monitor import monitor_loop
 from tj_bot.services.qbittorrent import QbittorrentClient, QbittorrentError
+from tj_bot.widgets.dispatch import (
+    WidgetQueryMiddleware,
+    widget_allowed_updates,
+    widget_observer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +80,14 @@ def register_global_middlewares(
     access_middleware = AccessMiddleware()
     # config (admin ids) -> throttling (spam never opens a session) -> database
     # (session + repo) -> access (track user, drop blocked); on all observers
-    # (inline queries pass throttling untouched — they only read the cache)
-    for observer in (dp.message, dp.callback_query, dp.inline_query):
+    # (inline queries pass throttling untouched — they only read the cache;
+    # widget queries too — Telegram caps them at 5 per 5 s per user)
+    for observer in (
+        dp.message,
+        dp.callback_query,
+        dp.inline_query,
+        widget_observer(dp),
+    ):
         observer.outer_middleware(config_middleware)
         observer.outer_middleware(throttling_middleware)
         observer.outer_middleware(database_middleware)
@@ -133,6 +144,7 @@ async def main(settings: Settings) -> None:
     dp["qbit"] = qbit
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
     dp.include_routers(*routers_list)
+    dp.update.outer_middleware(WidgetQueryMiddleware(dp))
     register_global_middlewares(dp, config, session_pool)
     await set_bot_commands(bot, config)
 
@@ -175,7 +187,7 @@ async def main(settings: Settings) -> None:
     try:
         await broadcaster.broadcast(bot, config.admin_ids, padded("Бот был запущен"))
         logger.info("Starting polling")
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, allowed_updates=widget_allowed_updates(dp))
     finally:
         for task in background_tasks:
             task.cancel()

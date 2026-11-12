@@ -13,6 +13,7 @@ USER_COMMANDS = [
     BotCommand(command="last", description="🔁 Повторить последний поиск"),
     BotCommand(command="history", description="🕘 История поиска"),
     BotCommand(command="favorites", description="⭐ Избранное"),
+    BotCommand(command="classic", description="🧩 Переключить режим интерфейса"),
 ]
 ADMIN_ONLY_COMMANDS = [
     BotCommand(command="dl", description="🖥 Консоль qBittorrent"),

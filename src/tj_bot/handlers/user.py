@@ -12,10 +12,15 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from tj_bot.config import AppConfig
 from tj_bot.db.filters import (
+    ALL_CATEGORIES,
     DATE_LABELS,
+    DEFAULT_FILTER,
+    DEFAULT_SORT,
     SEEDERS_LABELS,
     SIZE_LABELS,
+    SORT_LABELS,
     ResultFilters,
+    category_token,
 )
 from tj_bot.db.models import Torrent
 from tj_bot.db.repo import TorrentRepo
@@ -31,11 +36,20 @@ from tj_bot.services.jackett import (
 # Dlt with type="server" and category_token are shared with the admin router;
 # the favorite labels are swapped in place by the favorites router
 __all__ = [
+    "ALL_CATEGORIES",
+    "DEFAULT_FILTER",
+    "DEFAULT_SORT",
+    "EMPTY_HISTORY_TEXT",
     "FAV_SAVED_LABEL",
     "FAV_SAVE_LABEL",
+    "SEARCH_USAGE_TEXT",
+    "SORT_LABELS",
     "Dlt",
+    "Hst",
     "Pg2",
+    "Upd",
     "category_token",
+    "perform_search",
     "result_keyboard",
     "user_router",
 ]
@@ -44,22 +58,14 @@ logger = logging.getLogger(__name__)
 
 user_router = Router()
 
-ALL_CATEGORIES = "ALL"
-DEFAULT_SORT = "se"
 NOT_FOUND_TEXT = padded("К сожалению ничего не найдено 😔")
 SEARCH_UNAVAILABLE_TEXT = padded("Поиск временно недоступен, попробуйте позже 🛠")
 SEARCHING_TEXT = padded("Поиск выполняется, ожидайте...")
+SEARCH_USAGE_TEXT = padded("Для поиска используйте:\n<code>/s Название</code>")
+EMPTY_HISTORY_TEXT = padded("История поиска пуста. Начните с /s")
 STALE_QUERY_TEXT = "Запрос устарел, выполните новый поиск: /s"  # alert popup
 
-DEFAULT_FILTER = "000"
 LIST_PAGE_SIZE = 10
-SORT_LABELS = {
-    "se": "Сиды ↓",
-    "sz": "Размер ↓",
-    "za": "Размер ↑",
-    "dt": "Дата ↓",
-    "da": "Дата ↑",
-}
 SORT_NEXT = {"se": "sz", "sz": "za", "za": "dt", "dt": "da", "da": "se"}
 
 # Favorite toggle labels; favorites.py swaps them in place on toggle.
@@ -104,11 +110,6 @@ class Hst(CallbackData, prefix="hst"):
 
 def normalize_query(raw: str) -> str:
     return " ".join(raw.split()).lower()[:200]
-
-
-def category_token(category: str) -> str:
-    """Short stable token that keeps callback_data under Telegram's 64 bytes."""
-    return hashlib.blake2s(category.encode("utf-8"), digest_size=4).hexdigest()
 
 
 async def resolve_category(repo: TorrentRepo, qh: str, token: str) -> str | None:
@@ -270,7 +271,7 @@ async def render_result_card(
     )
 
 
-async def run_search(
+async def perform_search(
     target: Message,
     user_id: int | None,
     raw_query: str,
@@ -278,8 +279,12 @@ async def run_search(
     jackett: JackettClient,
     config: AppConfig,
     force_refresh: bool = False,
-) -> None:
-    """Shared search flow for /s, the refresh button and history replays."""
+) -> tuple[str, int, bool] | None:
+    """Serve the query from the cache or the trackers and record it.
+
+    Returns ``(query hash, result count, from_cache)``; None when there is
+    nothing to show — ``target`` then already explains why.
+    """
     query_text = normalize_query(raw_query)
     if not force_refresh:
         cache_window = datetime.timedelta(seconds=config.settings.search_cache_seconds)
@@ -287,10 +292,7 @@ async def run_search(
         if recent is not None:
             if user_id is not None:
                 await repo.record_search_event(user_id, recent.id)
-            await render_result_card(
-                target, repo, config, recent.hash, recent.result_count, user_id, True
-            )
-            return
+            return recent.hash, recent.result_count, True
 
     # the tracker round-trip can take up to jackett_timeout_seconds — release
     # the per-update transaction so it does not pin a pool connection and the
@@ -301,10 +303,10 @@ async def run_search(
     except JackettError:
         logger.exception("Search failed for query %r", raw_query)
         await target.edit_text(SEARCH_UNAVAILABLE_TEXT)
-        return
+        return None
     if not items:
         await target.edit_text(NOT_FOUND_TEXT)
-        return
+        return None
 
     ids = await repo.upsert_torrents(items)
     unique_ids = list(dict.fromkeys(ids))
@@ -315,7 +317,26 @@ async def run_search(
     query_id = await repo.create_search(qh, unique_ids, query_text)
     if user_id is not None:
         await repo.record_search_event(user_id, query_id)
-    await render_result_card(target, repo, config, qh, len(unique_ids), user_id, False)
+    return qh, len(unique_ids), False
+
+
+async def run_search(
+    target: Message,
+    user_id: int | None,
+    raw_query: str,
+    repo: TorrentRepo,
+    jackett: JackettClient,
+    config: AppConfig,
+    force_refresh: bool = False,
+) -> None:
+    """Shared text-card search flow for /s, the refresh button and history."""
+    found = await perform_search(
+        target, user_id, raw_query, repo, jackett, config, force_refresh
+    )
+    if found is None:
+        return
+    qh, total, from_cache = found
+    await render_result_card(target, repo, config, qh, total, user_id, from_cache)
 
 
 @user_router.message(F.text, Command("s"))
@@ -327,8 +348,7 @@ async def srch_torrent(
     command: CommandObject,
 ) -> None:
     if command.args is None:
-        text = ["Для поиска используйте:", "<code>/s Название</code>"]
-        await message.answer(padded("\n".join(text)), parse_mode=ParseMode.HTML)
+        await message.answer(SEARCH_USAGE_TEXT, parse_mode=ParseMode.HTML)
         return
     srch_message = await message.answer(SEARCHING_TEXT)
     user_id = message.from_user.id if message.from_user else None
@@ -376,7 +396,7 @@ async def repeat_last_search(
         return
     history = await repo.get_user_history(user_id, limit=1)
     if not history:
-        await message.answer(padded("История поиска пуста. Начните с /s"))
+        await message.answer(EMPTY_HISTORY_TEXT)
         return
     srch_message = await message.answer(SEARCHING_TEXT)
     await run_search(srch_message, user_id, history[0][1], repo, jackett, config)
@@ -389,7 +409,7 @@ async def show_history(message: Message, repo: TorrentRepo) -> None:
         return
     history = await repo.get_user_history(user_id)
     if not history:
-        await message.answer(padded("История поиска пуста. Начните с /s"))
+        await message.answer(EMPTY_HISTORY_TEXT)
         return
     rows = [
         [

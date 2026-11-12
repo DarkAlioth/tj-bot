@@ -27,6 +27,7 @@ from tj_bot.db.maintenance import cleanup_loop
 from tj_bot.db.migrate import run_migrations
 from tj_bot.db.repo import TorrentRepo
 from tj_bot.handlers import routers_list
+from tj_bot.handlers.widgets_search import register_enrichment_push
 from tj_bot.middlewares.access import AccessMiddleware
 from tj_bot.middlewares.config import ConfigMiddleware
 from tj_bot.middlewares.database import DatabaseMiddleware
@@ -146,6 +147,7 @@ async def main(settings: Settings) -> None:
     dp["jackett"] = jackett
     dp["qbit"] = qbit
     dp["enricher"] = enricher or NullEnricher()
+    register_enrichment_push(bot, session_pool, dp["enricher"])
     dp["started_at"] = datetime.datetime.now(datetime.UTC)
     dp.include_routers(*routers_list)
     dp.update.outer_middleware(WidgetQueryMiddleware(dp))

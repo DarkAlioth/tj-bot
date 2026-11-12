@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 from dataclasses import dataclass
 
 from sqlalchemy import ColumnElement
@@ -20,6 +21,22 @@ SIZE_RANGES: list[tuple[int, int | None]] = [
 SIZE_LABELS = ["любой", "< 1 GB", "1–5 GB", "5–20 GB", "> 20 GB"]
 DATE_DAYS = [0, 7, 30, 365]
 DATE_LABELS = ["любая", "неделя", "месяц", "год"]
+
+ALL_CATEGORIES = "ALL"
+DEFAULT_SORT = "se"
+DEFAULT_FILTER = "000"
+SORT_LABELS = {
+    "se": "Сиды ↓",
+    "sz": "Размер ↓",
+    "za": "Размер ↑",
+    "dt": "Дата ↓",
+    "da": "Дата ↑",
+}
+
+
+def category_token(category: str) -> str:
+    """Short stable token that keeps callback_data under Telegram's 64 bytes."""
+    return hashlib.blake2s(category.encode("utf-8"), digest_size=4).hexdigest()
 
 
 @dataclass(frozen=True)

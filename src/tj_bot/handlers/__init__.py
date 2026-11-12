@@ -8,6 +8,7 @@ from tj_bot.handlers.qbit_console import qbit_router
 from tj_bot.handlers.server_download import server_download_router
 from tj_bot.handlers.user import user_router
 from tj_bot.handlers.users import users_router
+from tj_bot.handlers.widgets_search import widgets_search_router
 
 routers_list = [
     errors_router,
@@ -17,6 +18,7 @@ routers_list = [
     admin_router,
     server_download_router,
     favorites_router,
+    widgets_search_router,
     user_router,
     inline_router,
     echo_router,

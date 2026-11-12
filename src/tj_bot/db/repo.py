@@ -317,6 +317,26 @@ class TorrentRepo:
         stmt = select(Torrent).where(Torrent.hash == torrent_hash)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def get_torrent_by_hash_prefix(
+        self, query_hash: str, prefix: str
+    ) -> Torrent | None:
+        """A result of the search whose hash starts with ``prefix``.
+
+        Widget requests carry only the first 8 hex characters of a hash; the
+        result set keeps the prefix unambiguous. An exact hash wins.
+        """
+        stmt = (
+            select(Torrent)
+            .select_from(Torrent, SearchQueryTorrent, SearchQuery)
+            .where(
+                *self._results_filter(query_hash, None),
+                Torrent.hash.startswith(prefix, autoescape=True),
+            )
+            .order_by((Torrent.hash == prefix).desc(), Torrent.hash)
+            .limit(1)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def add_favorite(self, user_id: int, torrent: Torrent) -> bool:
         """Star a cached torrent; returns False when already starred."""
         stmt = (
